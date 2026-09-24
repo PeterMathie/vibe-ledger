@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "description": "Synthetic fixture set for Vibe Ledger semantic engine.",
+    "currency": "GBP",
+    "month": "2026-09",
+    "budget_base_minor": 300000,
+    "allocation_basis_points": {
+      "LIVING": 5000,
+      "SAVING": 3000,
+      "FUN": 2000
+    }
+  },
+  "events": [
+    {
+      "id": "salary",
+      "amount_minor": 300000,
+      "description": "EMPLOYER PAYROLL",
+      "expected_type": "INCOME",
+      "counts_toward_budget_base": true
+    },
+    {
+      "id": "coffee",
+      "amount_minor": -420,
+      "description": "BLACK SHEEP COFFEE",
+      "expected_type": "SPEND",
+      "category": "Coffee",
+      "super_category": "FUN"
+    },
+    {
+      "id": "rent",
+      "amount_minor": -90000,
+      "description": "RENT",
+      "expected_type": "SPEND",
+      "category": "Rent",
+      "super_category": "LIVING"
+    },
+    {
+      "id": "moneybox",
+      "amount_minor": -20000,
+      "description": "MONEYBOX",
+      "expected_type": "SAVING_CONTRIBUTION",
+      "category": "Investments",
+      "super_category": "SAVING"
+    },
+    {
+      "id": "house_pot",
+      "amount_minor": -20000,
+      "description": "HOUSE POT DEPOSIT",
+      "expected_type": "SAVING_CONTRIBUTION",
+      "category": "House saving",
+      "super_category": "SAVING"
+    },
+    {
+      "id": "savings_withdrawal",
+      "amount_minor": 600000,
+      "description": "TRANSFER FROM SAVINGS",
+      "expected_type": "SAVING_WITHDRAWAL"
+    },
+    {
+      "id": "internal_transfer",
+      "amount_minor": -30000,
+      "description": "TRANSFER TO OWN ACCOUNT",
+      "expected_type": "INTERNAL_TRANSFER"
+    },
+    {
+      "id": "holiday_hotel",
+      "amount_minor": -70000,
+      "description": "AMSTERDAM HOTEL",
+      "expected_type": "SPEND",
+      "category": "Holiday",
+      "super_category": "FUN",
+      "budget_scope": "EXCLUDED"
+    },
+    {
+      "id": "holiday_coffee",
+      "amount_minor": -400,
+      "description": "AMSTERDAM COFFEE",
+      "expected_type": "SPEND",
+      "category": "Coffee",
+      "super_category": "FUN",
+      "budget_scope": "INCLUDED"
+    },
+    {
+      "id": "annual_subscription",
+      "amount_minor": -9000,
+      "description": "AMAZON PRIME",
+      "expected_type": "SPEND",
+      "category": "Subscriptions",
+      "super_category": "LIVING"
+    }
+  ]
+}
