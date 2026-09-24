@@ -125,6 +125,14 @@ describe('Home and Explorer view models', () => {
       'Subscriptions',
       'Groceries',
     ]);
+    expect(explorer.superCategories[0]).toMatchObject({
+      transactionCountLabel: '3 transactions',
+    });
+    expect(
+      explorer.breakdown.find(({ label }) => label === 'Groceries'),
+    ).toMatchObject({
+      transactionCountLabel: '1 transaction',
+    });
   });
 
   it('honours exact-date filters and exposes semantic status on every row', () => {

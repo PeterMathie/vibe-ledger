@@ -3,7 +3,11 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type { Database, DatabaseValue } from '../../src/data/database';
 
 export class NodeDatabase implements Database {
-  readonly native = new DatabaseSync(':memory:');
+  readonly native: DatabaseSync;
+
+  constructor(path = ':memory:') {
+    this.native = new DatabaseSync(path);
+  }
 
   async execAsync(sql: string): Promise<void> {
     this.native.exec(sql);

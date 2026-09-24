@@ -245,6 +245,11 @@ export async function resetDemoData(database: Database): Promise<void> {
   await database.execAsync('BEGIN IMMEDIATE;');
   try {
     await database.execAsync(`
+      DELETE FROM classification_changes
+      WHERE raw_transaction_id IN (
+        SELECT record_id FROM demo_dataset_records
+        WHERE record_type = 'RAW_TRANSACTION'
+      );
       DELETE FROM transaction_splits
       WHERE raw_transaction_id IN (
         SELECT record_id FROM demo_dataset_records
@@ -266,8 +271,11 @@ export async function resetDemoData(database: Database): Promise<void> {
         WHERE record_type = 'MONTHLY_BUDGET'
       );
       DELETE FROM demo_dataset_records;
-      DELETE FROM demo_dataset_state WHERE dataset_id = '${DEMO_DATASET_ID}';
     `);
+    await database.runAsync(
+      'DELETE FROM demo_dataset_state WHERE dataset_id = ?;',
+      DEMO_DATASET_ID,
+    );
     await database.execAsync('COMMIT;');
   } catch (error) {
     await database.execAsync('ROLLBACK;');
@@ -631,6 +639,23 @@ function buildQueryWhere(
     } as const;
     clauses.push(`abs(r.amount_minor) ${operators[query.amount.comparator]} ?`);
     params.push(query.amount.thresholdMinor);
+  }
+  if (query.weekdays !== undefined && query.weekdays.length > 0) {
+    if (
+      query.weekdays.some(
+        (weekday) => !Number.isInteger(weekday) || weekday < 0 || weekday > 6,
+      )
+    ) {
+      throw new DomainValidationError('Query weekday must be between 0 and 6.');
+    }
+    const placeholders = query.weekdays.map(() => '?').join(', ');
+    clauses.push(
+      `CAST(strftime('%w', r.created_at) AS INTEGER) IN (${placeholders})`,
+    );
+    params.push(...query.weekdays);
+  }
+  if (query.needsReview === true) {
+    clauses.push(`c.confidence = 'LOW'`);
   }
   return { clauses, params };
 }

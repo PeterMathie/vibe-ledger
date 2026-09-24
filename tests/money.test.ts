@@ -6,10 +6,22 @@ import {
   allocateByBasisPoints,
   formatMoney,
   money,
+  parseDecimalMoney,
   subtractMoney,
 } from '../src/domain/money';
 
 describe('BL-001 money primitive', () => {
+  it('parses decimal input into exact integer minor units', () => {
+    expect(parseDecimalMoney('50', 'GBP')).toEqual({
+      amountMinor: 5_000,
+      currency: 'GBP',
+    });
+    expect(parseDecimalMoney('14.99', 'GBP').amountMinor).toBe(1_499);
+    expect(() => parseDecimalMoney('1.001', 'GBP')).toThrow(
+      'no more than two decimal places',
+    );
+  });
+
   it('adds and subtracts integer minor units in one currency', () => {
     expect(addMoney(money(1_000, 'gbp'), money(234, 'GBP'))).toEqual({
       amountMinor: 1_234,

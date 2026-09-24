@@ -44,6 +44,8 @@ export interface ExplorerTransactionViewModel {
   readonly typeLabel: string;
   readonly scopeLabel: string;
   readonly confidenceLabel: string | null;
+  readonly note: string | null;
+  readonly updatedAtLabel: string;
 }
 
 export interface ExplorerBreakdownViewModel {
@@ -53,6 +55,7 @@ export interface ExplorerBreakdownViewModel {
   readonly amountMinor: number;
   readonly amountLabel: string;
   readonly percentageLabel: string;
+  readonly transactionCountLabel: string;
   readonly transactions: readonly ExplorerTransactionViewModel[];
 }
 
@@ -61,6 +64,7 @@ export interface ExplorerSuperCategoryViewModel {
   readonly label: string;
   readonly amountLabel: string;
   readonly percentageLabel: string;
+  readonly transactionCountLabel: string;
   readonly categories: readonly ExplorerBreakdownViewModel[];
 }
 
@@ -252,6 +256,7 @@ export function createExplorerViewModel(
       amountMinor: item.amountMinor,
       amountLabel: formatMinor(item.amountMinor, currency, locale),
       percentageLabel: '',
+      transactionCountLabel: formatCount(item.transactionIds.size),
       transactions: [...item.transactionIds].flatMap((id) => {
         const transaction = transactionRowsById.get(id);
         return transaction === undefined ? [] : [transaction];
@@ -291,6 +296,13 @@ export function createExplorerViewModel(
         label: SUPER_CATEGORY_LABELS[key],
         amountLabel: formatMinor(total, currency, locale),
         percentageLabel: formatRatio(total, overallTotal),
+        transactionCountLabel: formatCount(
+          new Set(
+            categories.flatMap((category) =>
+              category.transactions.map(({ id }) => id),
+            ),
+          ).size,
+        ),
         categories,
       },
     ];
@@ -383,6 +395,8 @@ function transactionRow(
     scopeLabel: transactionScopeLabel(transaction),
     confidenceLabel:
       transaction.classification.confidence === 'LOW' ? 'Needs review' : null,
+    note: transaction.classification.note,
+    updatedAtLabel: transaction.classification.updatedAt,
   };
 }
 
@@ -567,4 +581,8 @@ function addSafe(left: number, right: number): number {
     throw new Error('View model money arithmetic exceeded safe range.');
   }
   return result;
+}
+
+function formatCount(count: number): string {
+  return `${count} transaction${count === 1 ? '' : 's'}`;
 }

@@ -282,6 +282,30 @@ describe('synthetic Demo Data repository', () => {
     expect(literalWildcard.matches).toEqual([]);
   });
 
+  it('filters Needs Review and weekdays without interpolating values', async () => {
+    await importDemoData(database);
+    const review = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', { needsReview: true }),
+      'GBP',
+    );
+    expect(review.matches.map(({ raw }) => raw.id)).toEqual([
+      'demo:needs-review',
+    ]);
+
+    const weekends = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', { weekdays: [0, 6] }),
+      'GBP',
+    );
+    expect(weekends.matches.length).toBeGreaterThan(0);
+    expect(
+      weekends.matches.every(({ raw }) =>
+        [0, 6].includes(new Date(raw.createdAt).getUTCDay()),
+      ),
+    ).toBe(true);
+  });
+
   it('rejects unsupported subscription filters and invalid query values', async () => {
     await importDemoData(database);
     await expect(

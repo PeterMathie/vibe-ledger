@@ -189,6 +189,23 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 3,
+    name: 'classification-corrections',
+    sql: `
+      CREATE TABLE classification_changes (
+        id TEXT PRIMARY KEY NOT NULL,
+        raw_transaction_id TEXT NOT NULL REFERENCES raw_transactions(id),
+        before_json TEXT NOT NULL,
+        after_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        undone_at TEXT
+      );
+
+      CREATE INDEX classification_changes_latest
+        ON classification_changes(raw_transaction_id, created_at DESC);
+    `,
+  },
 ];
 
 export async function migrateDatabase(database: Database): Promise<void> {

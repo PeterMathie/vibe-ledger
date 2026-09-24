@@ -36,7 +36,10 @@ TypeScript semantic engine, Expo SQLite migrations, deterministic fixtures, and
 executable money-model acceptance tests. The first interactive layer provides a
 clearly labelled local Demo Data flow, an editable current-month allocation
 ring, proportional runover, a monthly spending heat map, and a hierarchical
-read-only Breakdown backed by typed local queries. It never connects to Monzo,
+Breakdown backed by typed local queries. Breakdown now supports auditable
+category/type/scope/note corrections, exact-conservation splits, undo,
+future-only merchant rules, Needs Review, deterministic local search with
+visible filters, and canonical structured filters. It never connects to Monzo,
 the network, or real credentials.
 
 The highest-risk area is **Monzo authentication/sync for a phone-only local app**, not the budgeting logic. The Monzo Developer API is suitable for a personal/small-user project, but its OAuth model creates constraints for a purely client-side app. See `docs/MONZO_INTEGRATION.md`.

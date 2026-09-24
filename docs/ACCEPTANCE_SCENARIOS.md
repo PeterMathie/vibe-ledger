@@ -18,6 +18,7 @@ Fun = 20% = £600
 Event: £4.20 coffee.
 
 Expected:
+
 - type: SPEND
 - category: Coffee
 - super-category: Fun
@@ -30,6 +31,7 @@ Expected:
 Event: £900 rent.
 
 Expected:
+
 - type: SPEND
 - category: Rent
 - Living actual +£900.
@@ -39,6 +41,7 @@ Expected:
 Event: £70 Tesco split into £55 Groceries and £15 party supplies.
 
 Expected:
+
 - Living +£55
 - Fun +£15
 - heat map +£70
@@ -53,6 +56,7 @@ Expected:
 Event: £200 current account → House pot.
 
 Expected:
+
 - SAVING_CONTRIBUTION
 - category: House saving
 - Saving target progress +£200
@@ -64,6 +68,7 @@ Expected:
 Event: £200 current account → Moneybox ISA.
 
 Expected:
+
 - same budget effect as B1;
 - category may be Investments;
 - Saving target progress +£200.
@@ -73,6 +78,7 @@ Expected:
 Event: £6,000 savings → current account.
 
 Expected:
+
 - SAVING_WITHDRAWAL
 - Income +£0
 - Living/Fun spending +£0
@@ -82,10 +88,12 @@ Expected:
 ### B4. Save then withdraw in same month
 
 Events:
+
 - +£900 saving contribution;
 - -£900 saving withdrawal.
 
 Expected:
+
 - Saving target progress = £900 / £900;
 - net savings movement = £0;
 - no fake income;
@@ -94,6 +102,7 @@ Expected:
 ### B5. Save £900, withdraw £5,000
 
 Expected:
+
 - Saving target progress = 100%;
 - net savings movement = -£4,100;
 - Home shows both without merging them into one number.
@@ -105,6 +114,7 @@ Expected:
 ### C1. Current account A → current account B
 
 Expected:
+
 - INTERNAL_TRANSFER
 - no budget effect.
 
@@ -113,9 +123,23 @@ Expected:
 User changes type to INTERNAL_TRANSFER and creates rule.
 
 Expected:
+
 - current month recalculates immediately;
 - future matching transfers follow rule;
 - historical raw data unchanged.
+- the rule does not rewrite matching records already present when it was created;
+- a later manual correction remains effective even if the rule is evaluated again.
+
+### C3. Undo latest correction
+
+User changes a transaction category, type, scope or note, then selects Undo.
+
+Expected:
+
+- the immediately previous classification and any split portions are restored;
+- Home and Explorer recalculate immediately;
+- the raw event remains unchanged;
+- the correction and undo timestamps remain auditable after restart.
 
 ---
 
@@ -126,6 +150,7 @@ Expected:
 Event: +£3,000 salary.
 
 Expected:
+
 - INCOME
 - counts toward budget base;
 - targets calculated from £3,000.
@@ -135,6 +160,7 @@ Expected:
 Event: +£6,000 from known savings source.
 
 Expected:
+
 - SAVING_WITHDRAWAL
 - does not increase budget base.
 
@@ -143,6 +169,7 @@ Expected:
 Event: +£500 sale/payment manually marked Income.
 
 Expected:
+
 - user can choose whether it contributes to budget base;
 - if yes, allocation targets update for current month.
 
@@ -155,6 +182,7 @@ Expected:
 Spend £120 Shopping, then receive £120 refund.
 
 Expected:
+
 - net Fun Shopping impact £0 if linked;
 - refund is not ordinary income.
 
@@ -163,6 +191,7 @@ Expected:
 Spend £80 restaurant; friend sends £40 reimbursement linked to transaction.
 
 Expected:
+
 - net Fun restaurant cost £40.
 
 ---
@@ -174,6 +203,7 @@ Expected:
 Event: £700 hotel, user chooses EXCLUDED.
 
 Expected:
+
 - still visible in Explorer;
 - searchable as Holiday;
 - does not affect Home Living/Fun gauges;
@@ -185,6 +215,7 @@ Expected:
 Event: £4 coffee, user keeps INCLUDED and category Coffee → Fun.
 
 Expected:
+
 - Fun +£4;
 - no dependency on which pot/account previously held the money.
 
@@ -199,6 +230,7 @@ This explicitly avoids trying to infer "funding provenance."
 Fun target £600, actual £300.
 
 Expected:
+
 - one line at 50%;
 - £300 left.
 
@@ -207,6 +239,7 @@ Expected:
 Fun target £600, actual £684.
 
 Expected:
+
 - line 1 full;
 - line 2 = 14%;
 - £84 over;
@@ -217,6 +250,7 @@ Expected:
 Target £600, actual £1,430.
 
 Expected:
+
 - two full lines;
 - third line ≈38.3%.
 
@@ -225,6 +259,7 @@ Expected:
 Target £600, actual £100,000.
 
 Expected:
+
 - approximately 166 full budget lengths plus partial final length;
 - scrollable/proportionally tall representation;
 - virtualised rendering if needed;
@@ -257,12 +292,14 @@ Expected: red; intensity rises continuously until capped at full monthly spendab
 Only event = £900 savings contribution.
 
 Expected:
+
 - heat-map spend = £0;
 - cell does not become red.
 
 ### H6. Click day
 
 Expected:
+
 - Explorer opens with exact date filter;
 - summary and transaction list match that date.
 
@@ -275,6 +312,7 @@ Expected:
 Select Fun over 12 months.
 
 Expected:
+
 - one stacked bar per month;
 - stack = Fun subcategories;
 - each month uses its own stored target.
@@ -284,6 +322,7 @@ Expected:
 Select Coffee.
 
 Expected:
+
 - one unstacked value per month;
 - click opens Explorer filtered to month + Coffee.
 
@@ -292,6 +331,7 @@ Expected:
 Select Living + Fun.
 
 Expected:
+
 - grouped stacked bars;
 - not one merged bar;
 - each super-category remains independently understandable.
@@ -311,6 +351,7 @@ Expected: matching merchant/description results.
 Query `fun over £50 last 6 months`.
 
 Expected visible filters:
+
 - Super-category = Fun
 - Amount > £50
 - Date = last 6 months
@@ -318,9 +359,31 @@ Expected visible filters:
 ### J3. Unrecognised phrase
 
 Expected:
+
 - do not fabricate meaning;
 - retain recognised tokens only or show "not understood";
 - filters remain visible.
+
+### J4. Safe merchant text
+
+Queries include `%`, `_`, quotes and SQL-like text.
+
+Expected:
+
+- merchant text is treated literally;
+- wildcard characters do not broaden the match;
+- no query text is executed as SQL;
+- the transaction database remains unchanged.
+
+### J5. Calendar phrases
+
+Queries: `restaurants august`, `Tesco 2026`, `saturday`, and `weekends`.
+
+Expected:
+
+- month and year become explicit date filters;
+- weekday/weekend meaning becomes a visible removable filter;
+- the remaining category or known merchant becomes its own visible filter.
 
 ---
 
@@ -329,12 +392,14 @@ Expected:
 ### K1. £90 annual subscription
 
 Expected:
+
 - interval 12 months;
 - monthly equivalent £7.50.
 
 ### K2. $200 / 24 months
 
 Expected:
+
 - monthly equivalent $8.33 (rounded display; exact internal decimal retained);
 - no synthetic monthly spending entry.
 
@@ -343,6 +408,7 @@ Expected:
 User marks Piano subscription "likely" or "unknown".
 
 Expected:
+
 - remains tracked;
 - no automatic reserve transaction created.
 
@@ -351,6 +417,7 @@ Expected:
 £90 renewal due in 6 months, £30 already reserved.
 
 Expected suggested reserve:
+
 - (£90 - £30) / 6 = £10/month.
 
 ---
@@ -363,6 +430,7 @@ September 50/30/20.
 October changed to 50/25/25.
 
 Expected:
+
 - September target lines remain 50/30/20;
 - October uses 50/25/25.
 
@@ -371,6 +439,18 @@ Expected:
 September transaction changed from Shopping → Groceries in November.
 
 Expected:
+
 - September actuals recalculate;
 - September target remains unchanged;
 - classification `updated_at` changes.
+
+### L3. Split correction
+
+User splits a £70 transaction.
+
+Expected:
+
+- £55 + £15 saves successfully;
+- £55 + £14.99 is rejected with a visible £0.01 remainder;
+- amounts are conserved in integer minor units;
+- restart preserves the raw parent and exact split children.

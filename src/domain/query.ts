@@ -19,6 +19,8 @@ export type AmountComparator =
 export type SubscriptionStatus =
   'DETECTED' | 'CONFIRMED' | 'MANUAL' | 'NOT_SUBSCRIPTION';
 
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
 export interface LedgerQuery {
   readonly date: DateFilter;
   readonly merchant?: string;
@@ -31,6 +33,8 @@ export interface LedgerQuery {
   readonly eventTypes?: readonly EventType[];
   readonly scopes?: readonly BudgetScope[];
   readonly subscriptionStatuses?: readonly SubscriptionStatus[];
+  readonly weekdays?: readonly Weekday[];
+  readonly needsReview?: boolean;
 }
 
 export function monthQuery(

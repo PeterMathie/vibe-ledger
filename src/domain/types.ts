@@ -84,3 +84,16 @@ export interface MonthlyBudget {
   readonly updatedAt: string;
   readonly closedAt: string | null;
 }
+
+export interface ClassificationRule {
+  readonly id: string;
+  readonly priority: number;
+  readonly enabled: boolean;
+  readonly matchType: 'merchant_name';
+  readonly matchValue: string;
+  readonly resultEventType: EventType;
+  readonly resultCategoryId: string | null;
+  readonly resultBudgetScope: BudgetScope | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
