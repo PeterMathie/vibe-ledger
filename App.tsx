@@ -318,12 +318,17 @@ export default function App() {
   );
 
   const refreshAfterCorrection = useCallback(
-    async (filter: ExplorerFilter, currency: string, month: string) => {
+    async (
+      filter: ExplorerFilter,
+      currency: string,
+      month: string,
+      returnTo: 'HOME' | 'TRENDS',
+    ) => {
       if (database === null) {
         return;
       }
       await refresh(database, month);
-      await openExplorer(filter, currency);
+      await openExplorer(filter, currency, [], returnTo);
     },
     [database, openExplorer, refresh],
   );
@@ -414,6 +419,7 @@ export default function App() {
         />
       ) : queryState.status === 'READY' ? (
         <ExplorerScreen
+          backDestination={screen.returnTo}
           database={database}
           palette={palette}
           filter={screen.filter}
@@ -436,6 +442,7 @@ export default function App() {
               screen.filter,
               budget.currency,
               budget.monthKey,
+              screen.returnTo,
             )
           }
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
@@ -2103,6 +2110,7 @@ function FilterButton({
 }
 
 function ExplorerScreen({
+  backDestination,
   database,
   palette,
   filter,
@@ -2115,6 +2123,7 @@ function ExplorerScreen({
   onOpenTrends,
   onBack,
 }: {
+  readonly backDestination: 'HOME' | 'TRENDS';
   readonly database: Database;
   readonly palette: Palette;
   readonly filter: ExplorerFilter;
@@ -2204,13 +2213,13 @@ function ExplorerScreen({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back to Home"
+        accessibilityLabel={`Back to ${backDestination === 'TRENDS' ? 'Trends' : 'Home'}`}
         onPress={onBack}
         style={styles.backButton}
         testID="explorer-back"
       >
         <Text style={[styles.textButtonLabel, { color: palette.accent }]}>
-          ← Home
+          ← {backDestination === 'TRENDS' ? 'Trends' : 'Home'}
         </Text>
       </Pressable>
       <Text style={[styles.demoPill, { color: palette.accent }]}>
