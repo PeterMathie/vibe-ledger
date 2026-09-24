@@ -1,0 +1,317 @@
+{
+  "meta": {
+    "description": "Synthetic difficult and boundary cases. All names and identifiers are invented.",
+    "default_currency": "GBP",
+    "schema_version": 1,
+    "deterministic_clock": "2026-11-30T12:00:00.000Z"
+  },
+  "monthly_budgets": [
+    {
+      "month_key": "2026-08",
+      "budget_base_minor": 300000,
+      "currency": "GBP",
+      "allocation_basis_points": {
+        "LIVING": 5000,
+        "SAVING": 3000,
+        "FUN": 2000
+      },
+      "closed": true
+    },
+    {
+      "month_key": "2026-09",
+      "budget_base_minor": 300000,
+      "currency": "GBP",
+      "allocation_basis_points": {
+        "LIVING": 5000,
+        "SAVING": 3000,
+        "FUN": 2000
+      },
+      "closed": true
+    },
+    {
+      "month_key": "2026-10",
+      "budget_base_minor": 300000,
+      "currency": "GBP",
+      "allocation_basis_points": {
+        "LIVING": 5000,
+        "SAVING": 2500,
+        "FUN": 2500
+      },
+      "closed": false
+    },
+    {
+      "month_key": "2026-11",
+      "budget_base_minor": 0,
+      "currency": "GBP",
+      "allocation_basis_points": {
+        "LIVING": 5000,
+        "SAVING": 3000,
+        "FUN": 2000
+      },
+      "closed": false,
+      "purpose": "Valid zero-target month"
+    }
+  ],
+  "events": [
+    {
+      "id": "august_cross_month_shoes",
+      "amount_minor": -12000,
+      "currency": "GBP",
+      "description": "SYNTHETIC SHOE SHOP",
+      "created_at": "2026-08-29T13:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Shopping",
+      "super_category": "FUN"
+    },
+    {
+      "id": "september_cross_month_refund",
+      "amount_minor": 12000,
+      "currency": "GBP",
+      "description": "SYNTHETIC SHOE SHOP REFUND",
+      "created_at": "2026-09-03T09:00:00.000Z",
+      "expected_type": "REFUND",
+      "offset_event_id": "august_cross_month_shoes",
+      "expected_month_effect_minor": -12000
+    },
+    {
+      "id": "exact_fun_target",
+      "amount_minor": -60000,
+      "currency": "GBP",
+      "description": "SYNTHETIC EVENT TICKETS",
+      "created_at": "2026-09-05T15:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Nights out",
+      "super_category": "FUN"
+    },
+    {
+      "id": "slightly_over_fun_target",
+      "amount_minor": -68400,
+      "currency": "GBP",
+      "description": "SYNTHETIC WEEKEND TRIP",
+      "created_at": "2026-09-06T15:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Holiday",
+      "super_category": "FUN"
+    },
+    {
+      "id": "two_hundred_thirty_eight_percent",
+      "amount_minor": -143000,
+      "currency": "GBP",
+      "description": "SYNTHETIC FESTIVAL PACKAGE",
+      "created_at": "2026-09-07T15:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Nights out",
+      "super_category": "FUN"
+    },
+    {
+      "id": "extreme_valid_purchase",
+      "amount_minor": -10000000,
+      "currency": "GBP",
+      "description": "SYNTHETIC LARGE PURCHASE",
+      "created_at": "2026-09-08T15:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Shopping",
+      "super_category": "FUN",
+      "purpose": "Runover rendering at approximately 166.67 budget lengths"
+    },
+    {
+      "id": "zero_value_bank_verification",
+      "amount_minor": 0,
+      "currency": "GBP",
+      "description": "SYNTHETIC CARD VERIFICATION",
+      "created_at": "2026-09-09T15:00:00.000Z",
+      "expected_type": "NEUTRAL",
+      "purpose": "Valid zero-value source event"
+    },
+    {
+      "id": "mixed_basket",
+      "amount_minor": -10001,
+      "currency": "GBP",
+      "description": "SYNTHETIC SUPERMARKET",
+      "created_at": "2026-09-10T15:00:00.000Z",
+      "expected_type": "SPEND",
+      "splits": [
+        {
+          "amount_minor_abs": 8000,
+          "category": "Groceries",
+          "super_category": "LIVING",
+          "budget_scope": "INCLUDED"
+        },
+        {
+          "amount_minor_abs": 2000,
+          "category": "Nights out",
+          "super_category": "FUN",
+          "budget_scope": "INCLUDED"
+        },
+        {
+          "amount_minor_abs": 1,
+          "category": "Shopping",
+          "super_category": "FUN",
+          "budget_scope": "EXCLUDED"
+        }
+      ]
+    },
+    {
+      "id": "save_900",
+      "amount_minor": -90000,
+      "currency": "GBP",
+      "description": "SYNTHETIC HOUSE SAVING",
+      "created_at": "2026-09-11T10:00:00.000Z",
+      "expected_type": "SAVING_CONTRIBUTION",
+      "category": "House saving",
+      "super_category": "SAVING"
+    },
+    {
+      "id": "withdraw_900",
+      "amount_minor": 90000,
+      "currency": "GBP",
+      "description": "SYNTHETIC SAVINGS WITHDRAWAL",
+      "created_at": "2026-09-12T10:00:00.000Z",
+      "expected_type": "SAVING_WITHDRAWAL"
+    },
+    {
+      "id": "withdraw_5000",
+      "amount_minor": 500000,
+      "currency": "GBP",
+      "description": "SYNTHETIC LARGE SAVINGS WITHDRAWAL",
+      "created_at": "2026-09-13T10:00:00.000Z",
+      "expected_type": "SAVING_WITHDRAWAL"
+    },
+    {
+      "id": "ordinary_account_transfer_out",
+      "amount_minor": -25000,
+      "currency": "GBP",
+      "description": "SYNTHETIC OWN ACCOUNT TRANSFER",
+      "created_at": "2026-09-14T10:00:00.000Z",
+      "expected_type": "INTERNAL_TRANSFER"
+    },
+    {
+      "id": "ordinary_account_transfer_in",
+      "amount_minor": 25000,
+      "currency": "GBP",
+      "description": "SYNTHETIC OWN ACCOUNT RECEIPT",
+      "created_at": "2026-09-14T10:01:00.000Z",
+      "expected_type": "INTERNAL_TRANSFER"
+    },
+    {
+      "id": "credit_card_payment",
+      "amount_minor": -45000,
+      "currency": "GBP",
+      "description": "SYNTHETIC CARD REPAYMENT",
+      "created_at": "2026-09-15T10:00:00.000Z",
+      "expected_type": "DEBT_PAYMENT"
+    },
+    {
+      "id": "pass_through_excluded_credit",
+      "amount_minor": 100000,
+      "currency": "GBP",
+      "description": "SYNTHETIC PASS THROUGH IN",
+      "created_at": "2026-09-16T10:00:00.000Z",
+      "expected_type": "NEUTRAL",
+      "budget_scope": "EXCLUDED"
+    },
+    {
+      "id": "pass_through_excluded_debit",
+      "amount_minor": -100000,
+      "currency": "GBP",
+      "description": "SYNTHETIC PASS THROUGH OUT",
+      "created_at": "2026-09-16T10:01:00.000Z",
+      "expected_type": "NEUTRAL",
+      "budget_scope": "EXCLUDED"
+    },
+    {
+      "id": "reclassification_history",
+      "amount_minor": -3500,
+      "currency": "GBP",
+      "description": "SYNTHETIC CORNER SHOP",
+      "created_at": "2026-09-17T10:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Groceries",
+      "super_category": "LIVING",
+      "classification_history": [
+        {
+          "category": "Shopping",
+          "super_category": "FUN",
+          "source": "IMPORT_HINT",
+          "active": false,
+          "updated_at": "2026-09-17T10:00:01.000Z"
+        },
+        {
+          "category": "Groceries",
+          "super_category": "LIVING",
+          "source": "MANUAL",
+          "active": true,
+          "updated_at": "2026-11-02T10:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "usd_subscription_renewal",
+      "amount_minor": -20000,
+      "currency": "USD",
+      "description": "SYNTHETIC PIANO SERVICE",
+      "created_at": "2026-09-18T10:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Subscriptions",
+      "super_category": "LIVING",
+      "purpose": "Original currency remains USD; no implicit conversion"
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": "annual_gbp",
+      "name": "Synthetic Annual Service",
+      "billing_amount_minor": 9000,
+      "billing_currency": "GBP",
+      "interval_months": 12,
+      "exact_monthly_equivalent": {
+        "numerator_minor": 9000,
+        "denominator_months": 12
+      },
+      "display_monthly_minor": 750
+    },
+    {
+      "id": "two_year_usd",
+      "name": "Synthetic Piano Service",
+      "billing_amount_minor": 20000,
+      "billing_currency": "USD",
+      "interval_months": 24,
+      "exact_monthly_equivalent": {
+        "numerator_minor": 20000,
+        "denominator_months": 24
+      },
+      "display_monthly_minor": 833,
+      "display_rounding": "nearest_minor_unit"
+    },
+    {
+      "id": "quarterly_gbp",
+      "name": "Synthetic Quarterly Service",
+      "billing_amount_minor": 2999,
+      "billing_currency": "GBP",
+      "interval_months": 3,
+      "exact_monthly_equivalent": {
+        "numerator_minor": 2999,
+        "denominator_months": 3
+      },
+      "display_monthly_minor": 1000
+    },
+    {
+      "id": "custom_days_eur",
+      "name": "Synthetic Forty Five Day Service",
+      "billing_amount_minor": 4500,
+      "billing_currency": "EUR",
+      "interval_days": 45,
+      "renewal_intent": "UNKNOWN",
+      "purpose": "Future interval-days handling without inventing a monthly transaction"
+    }
+  ],
+  "import_replays": [
+    {
+      "source": "fixture",
+      "source_transaction_id": "duplicate_replay",
+      "replay_count": 3,
+      "expected_raw_row_count": 1,
+      "expected_classification_row_count": 0
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Vibe Ledger",
+    "slug": "vibe-ledger",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.vibeledger"
+    },
+    "android": {
+      "package": "app.vibeledger",
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": ["expo-sqlite"]
+  }
+}

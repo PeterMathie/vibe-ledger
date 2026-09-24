@@ -1,0 +1,44 @@
+{
+  "name": "vibe-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "android:clear": "expo start --android --clear",
+    "ios": "expo start --ios",
+    "test": "vitest run --passWithNoTests=false",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "doctor": "expo-doctor",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write App.tsx index.ts src tests *.json *.mjs *.mts docs/FOUNDATION.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/adr",
+    "format:check": "prettier --check App.tsx index.ts src tests *.json *.mjs *.mts docs/FOUNDATION.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/adr",
+    "check": "npm run test && npm run typecheck && npm run lint && npm run format:check && npm run doctor"
+  },
+  "dependencies": {
+    "expo": "~57.0.25",
+    "expo-sqlite": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.10.1",
+    "@types/react": "~19.2.2",
+    "@vitest/coverage-v8": "^5.0.1",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.2",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "expo-doctor": "^1.18.19",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": "^22.13.0 || >=24.3.0"
+  }
+}

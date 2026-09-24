@@ -31,9 +31,36 @@ An investor/product-overview slideshow is included at [`docs/product-overview.ht
 
 ## Status
 
-The core product model is sufficiently defined to start implementation.
+Phase 0 foundation implementation is underway. The repository now contains an
+Expo React Native scaffold for Android and iOS, a pure TypeScript semantic
+engine, Expo SQLite migrations, deterministic fixtures, and executable
+money-model acceptance tests.
 
 The highest-risk area is **Monzo authentication/sync for a phone-only local app**, not the budgeting logic. The Monzo Developer API is suitable for a personal/small-user project, but its OAuth model creates constraints for a purely client-side app. See `docs/MONZO_INTEGRATION.md`.
+
+## Development
+
+Use a supported Node.js release: Node 22.13+ LTS or Node 24.3+.
+
+```sh
+npm ci
+npm run check
+npm run android
+# or, with Xcode available:
+npm run ios
+```
+
+`npm run android` expects Android Studio or the Android command-line SDK,
+`adb`, and an already-created emulator or connected device. `npm run ios`
+expects macOS with a supported Xcode simulator environment.
+
+Architecture and test boundaries are documented in
+[`docs/FOUNDATION.md`](docs/FOUNDATION.md). The strict-local Monzo integration
+decision and security boundaries are recorded in
+[`docs/adr/0001-strict-local-monzo.md`](docs/adr/0001-strict-local-monzo.md).
+Security/privacy controls and third-party policy are maintained separately in
+[`docs/SECURITY_AND_PRIVACY.md`](docs/SECURITY_AND_PRIVACY.md) and
+[`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md).
 
 ## Non-negotiable product principles
 
