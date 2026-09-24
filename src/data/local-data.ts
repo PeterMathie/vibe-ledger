@@ -449,6 +449,7 @@ export function validatePortableExport(input: unknown): PortableExport {
       validateRow(table, row, index);
     }
   }
+  assertRequiredCatalog(input.data);
 
   return input as unknown as PortableExport;
 }
@@ -601,6 +602,48 @@ function assertSafeEmbeddedJson(value: unknown, path: string): void {
     throw new Error(`${path} is invalid JSON.`);
   }
   assertNoForbiddenKeys(parsed, path);
+}
+
+function assertRequiredCatalog(data: Record<string, unknown>): void {
+  const superCategories = data.super_categories as PortableRow[];
+  const actualSuperCategories = new Map(
+    superCategories.map((row) => [row.id, row.key]),
+  );
+  const requiredSuperCategories = new Map([
+    ['super:living', 'LIVING'],
+    ['super:saving', 'SAVING'],
+    ['super:fun', 'FUN'],
+  ]);
+  for (const [id, key] of requiredSuperCategories) {
+    if (actualSuperCategories.get(id) !== key) {
+      throw new Error(`Export is missing required super-category ${id}.`);
+    }
+  }
+
+  const categoryIds = new Set(
+    (data.categories as PortableRow[]).map((row) => row.id),
+  );
+  const requiredCategoryIds = [
+    'category:rent',
+    'category:bills',
+    'category:groceries',
+    'category:transport',
+    'category:subscriptions',
+    'category:house-saving',
+    'category:investments',
+    'category:holiday-saving',
+    'category:emergency-fund',
+    'category:coffee',
+    'category:shopping',
+    'category:restaurants',
+    'category:nights-out',
+    'category:cinema',
+  ];
+  for (const id of requiredCategoryIds) {
+    if (!categoryIds.has(id)) {
+      throw new Error(`Export is missing required category ${id}.`);
+    }
+  }
 }
 
 function assertNoForbiddenKeys(value: unknown, path: string): void {

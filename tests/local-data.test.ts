@@ -87,6 +87,12 @@ describe('BL-040 strict local export, restore, and wipe', () => {
         },
       }),
     ).toThrow('created_at must be a valid timestamp');
+    expect(() =>
+      validatePortableExport({
+        ...exported,
+        data: { ...exported.data, categories: [] },
+      }),
+    ).toThrow('missing required category');
   });
 
   it('never exports source payloads, credentials, or non-synthetic raw rows', async () => {
