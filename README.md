@@ -58,6 +58,9 @@ Architecture and test boundaries are documented in
 [`docs/FOUNDATION.md`](docs/FOUNDATION.md). The strict-local Monzo integration
 decision and security boundaries are recorded in
 [`docs/adr/0001-strict-local-monzo.md`](docs/adr/0001-strict-local-monzo.md).
+Security/privacy controls and third-party policy are maintained separately in
+[`docs/SECURITY_AND_PRIVACY.md`](docs/SECURITY_AND_PRIVACY.md) and
+[`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md).
 
 ## Non-negotiable product principles
 

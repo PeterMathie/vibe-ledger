@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fixture from '../fixtures/semantic-fixtures.json';
 import { saveManualClassification } from '../src/data/classification-repository';
 import { importFixture } from '../src/data/fixture-importer';
-import { migrateDatabase } from '../src/data/migrations';
+import { MIGRATIONS, migrateDatabase } from '../src/data/migrations';
 import type { Classification } from '../src/domain/types';
 import { NodeDatabase } from './support/node-database';
 
@@ -16,6 +16,13 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
 
   afterEach(() => {
     database.close();
+  });
+
+  it('keeps migration versions contiguous and names stable', () => {
+    expect(MIGRATIONS.map(({ version }) => version)).toEqual([1]);
+    expect(MIGRATIONS.map(({ name }) => name)).toEqual([
+      'phase-zero-foundation',
+    ]);
   });
 
   it('migrates a fresh database and is safe to run again', async () => {
@@ -41,6 +48,15 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
       'super_categories',
       'transaction_classifications',
       'transaction_splits',
+    ]);
+    expect(
+      await database.getAllAsync<{ id: string; key: string }>(
+        'SELECT id, key FROM super_categories ORDER BY sort_order;',
+      ),
+    ).toEqual([
+      { id: 'super:living', key: 'LIVING' },
+      { id: 'super:saving', key: 'SAVING' },
+      { id: 'super:fun', key: 'FUN' },
     ]);
   });
 
