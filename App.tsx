@@ -2570,9 +2570,11 @@ function MoneyMapScreen({
                         accessibilityLabel={`${category.label}, ${category.amountLabel}, ${
                           category.direction === 'OFFSET'
                             ? 'refund or reimbursement offset'
-                            : category.direction === 'ZERO'
-                              ? 'net zero category activity'
-                              : branch.measureLabel
+                            : category.hasOffset
+                              ? 'net activity after refund or reimbursement offset'
+                              : category.direction === 'ZERO'
+                                ? 'net zero category activity'
+                                : branch.measureLabel
                         }. Open exact month category Breakdown.`}
                         onPress={() => onExplore(category.drillDown)}
                         style={styles.moneyMapCategoryRow}
@@ -2606,9 +2608,11 @@ function MoneyMapScreen({
                             >
                               {category.direction === 'OFFSET'
                                 ? 'Refund / reimbursement offset'
-                                : category.direction === 'ZERO'
-                                  ? 'Net zero category activity'
-                                  : branch.measureLabel}
+                                : category.hasOffset
+                                  ? 'Net after refund / reimbursement offset'
+                                  : category.direction === 'ZERO'
+                                    ? 'Net zero category activity'
+                                    : branch.measureLabel}
                             </Text>
                           </View>
                           <Text

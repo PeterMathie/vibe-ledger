@@ -106,7 +106,11 @@ describe('Experimental Money Map', () => {
     expect(shopping).toMatchObject({
       amountMinor: 0,
       direction: 'ZERO',
+      hasOffset: true,
     });
+    expect(model.accessibilityRows).toContain(
+      'Fun, Shopping, £0.00, net activity after refund or reimbursement offset',
+    );
     expect(model.branches.find(({ key }) => key === 'FUN')?.amountMinor).toBe(
       136_320,
     );

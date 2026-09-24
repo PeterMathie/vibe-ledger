@@ -13,6 +13,7 @@ export interface MoneyMapCategory {
   readonly amountMinor: number;
   readonly amountLabel: string;
   readonly direction: 'FORWARD' | 'OFFSET' | 'ZERO';
+  readonly hasOffset: boolean;
   readonly width: number;
   readonly drillDown: LedgerQuery;
 }
@@ -80,8 +81,19 @@ export function createMoneyMapModel(
     throw new DomainValidationError('Money Map month is unavailable.');
   }
   const scaleMinor = Math.max(1, budget.budgetBaseMinor);
+  const offsetCategoryIds = collectOffsetCategoryIds(
+    transactions,
+    resolutionTransactions,
+  );
   const branches = month.bars.map((bar) =>
-    createBranch(mode, bar, scaleMinor, budget.currency, locale),
+    createBranch(
+      mode,
+      bar,
+      scaleMinor,
+      budget.currency,
+      locale,
+      offsetCategoryIds,
+    ),
   );
   const budgetBaseLabel = formatMinor(
     budget.budgetBaseMinor,
@@ -114,9 +126,11 @@ export function createMoneyMapModel(
             `${branch.label}, ${category.label}, ${category.amountLabel}, ${
               category.direction === 'OFFSET'
                 ? 'refund or reimbursement offset'
-                : category.direction === 'ZERO'
-                  ? 'net zero category activity'
-                  : branch.measureLabel
+                : category.hasOffset
+                  ? 'net activity after refund or reimbursement offset'
+                  : category.direction === 'ZERO'
+                    ? 'net zero category activity'
+                    : branch.measureLabel
             }`,
         ),
       ]),
@@ -151,6 +165,7 @@ function createBranch(
   scaleMinor: number,
   currency: string,
   locale: string,
+  offsetCategoryIds: ReadonlySet<string>,
 ): MoneyMapBranch {
   const targetMinor = bar.targetMinor ?? 0;
   const amountMinor = mode === 'PLAN' ? targetMinor : bar.actualMinor;
@@ -163,6 +178,7 @@ function createBranch(
           label: segment.label,
           amountMinor: segment.amountMinor,
           amountLabel: formatMinor(segment.amountMinor, currency, locale),
+          hasOffset: offsetCategoryIds.has(segment.id),
           direction:
             segment.amountMinor < 0
               ? ('OFFSET' as const)
@@ -206,6 +222,55 @@ function createBranch(
     categories,
     drillDown: bar.drillDown,
   };
+}
+
+function collectOffsetCategoryIds(
+  transactions: readonly ClassifiedTransaction[],
+  resolutionTransactions: readonly ClassifiedTransaction[],
+): ReadonlySet<string> {
+  const byId = new Map(
+    resolutionTransactions.map((transaction) => [
+      transaction.raw.id,
+      transaction,
+    ]),
+  );
+  const result = new Set<string>();
+  for (const transaction of transactions) {
+    if (transaction.classification.budgetScope !== 'INCLUDED') {
+      continue;
+    }
+    for (const split of transaction.splits) {
+      if (
+        split.budgetScope === 'INCLUDED' &&
+        (split.eventType === 'REFUND' || split.eventType === 'REIMBURSEMENT') &&
+        split.categoryId !== null
+      ) {
+        result.add(split.categoryId);
+      }
+    }
+    if (
+      transaction.splits.length > 0 ||
+      (transaction.classification.eventType !== 'REFUND' &&
+        transaction.classification.eventType !== 'REIMBURSEMENT')
+    ) {
+      continue;
+    }
+    if (transaction.classification.categoryId !== null) {
+      result.add(transaction.classification.categoryId);
+      continue;
+    }
+    const offsetId = transaction.classification.offsetRawTransactionId;
+    const offset = offsetId === null ? undefined : byId.get(offsetId);
+    if (offset?.category !== null && offset?.category !== undefined) {
+      result.add(offset.category.id);
+    } else if (offset?.splitCategories.length === 1) {
+      const category = offset.splitCategories[0];
+      if (category !== undefined) {
+        result.add(category.id);
+      }
+    }
+  }
+  return result;
 }
 
 function roundedBasisPoints(numerator: number, denominator: number): number {
