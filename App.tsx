@@ -1,17 +1,29 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Svg, { Circle, G } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   View,
+  type GestureResponderEvent,
 } from 'react-native';
 
+import {
+  createRunoverModel,
+  DEFAULT_ALLOCATION,
+  parseAllocationPercentages,
+  ratiosFromBoundaries,
+  runoverRow,
+} from './src/app/allocation';
+import { createMonthlyHeatMap, type MonthlyHeatMap } from './src/app/heat-map';
 import type { ExplorerFilter } from './src/app/view-models';
 import {
   createExplorerViewModel,
@@ -22,10 +34,18 @@ import type { Database } from './src/data/database';
 import {
   importDemoData,
   loadLedgerSnapshot,
+  queryLedgerTransactions,
   resetDemoData,
+  updateMonthlyAllocation,
+  type LedgerQueryResult,
   type LedgerSnapshot,
 } from './src/data/demo-repository';
+import {
+  createMonthlyBudget,
+  type AllocationRatios,
+} from './src/domain/budget';
 import { formatMoney, money } from './src/domain/money';
+import { dayQuery, monthQuery } from './src/domain/query';
 
 type LoadState =
   | { readonly status: 'LOADING' }
@@ -39,6 +59,10 @@ type Screen =
       readonly name: 'EXPLORER';
       readonly filter: ExplorerFilter;
     };
+
+type QueryLoadState =
+  | { readonly status: 'IDLE' | 'LOADING' | 'ERROR' }
+  | { readonly status: 'READY'; readonly result: LedgerQueryResult };
 
 interface Palette {
   readonly background: string;
@@ -93,6 +117,9 @@ export default function App() {
   const [database, setDatabase] = useState<Database | null>(null);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'LOADING' });
   const [screen, setScreen] = useState<Screen>({ name: 'HOME' });
+  const [queryState, setQueryState] = useState<QueryLoadState>({
+    status: 'IDLE',
+  });
   const [busyAction, setBusyAction] = useState<'LOAD' | 'RESET' | null>(null);
 
   const refresh = useCallback(
@@ -185,6 +212,48 @@ export default function App() {
     [database, refresh],
   );
 
+  const openExplorer = useCallback(
+    async (filter: ExplorerFilter, currency: string) => {
+      if (database === null) {
+        return;
+      }
+      setScreen({ name: 'EXPLORER', filter });
+      setQueryState({ status: 'LOADING' });
+      try {
+        setQueryState({
+          status: 'READY',
+          result: await queryLedgerTransactions(database, filter, currency),
+        });
+      } catch {
+        setQueryState({ status: 'ERROR' });
+      }
+    },
+    [database],
+  );
+
+  const updateAllocation = useCallback(
+    async (
+      monthKey: string,
+      currency: string,
+      budgetBaseMinor: number,
+      ratios: AllocationRatios,
+    ) => {
+      if (database === null) {
+        return;
+      }
+      await updateMonthlyAllocation(
+        database,
+        monthKey,
+        currency,
+        budgetBaseMinor,
+        ratios,
+        '2026-09-24T12:00:00.000Z',
+      );
+      await refresh(database, monthKey);
+    },
+    [database, refresh],
+  );
+
   if (loadState.status === 'LOADING') {
     return (
       <StateScreen
@@ -235,6 +304,7 @@ export default function App() {
       <StatusBar style={palette === DARK ? 'light' : 'dark'} />
       {screen.name === 'HOME' ? (
         <HomeScreen
+          key={`${budget.monthKey}:${budget.updatedAt}`}
           palette={palette}
           budget={budget}
           summary={summary}
@@ -243,17 +313,23 @@ export default function App() {
           activeMonth={snapshot.activeMonth ?? budget.monthKey}
           busy={busyAction !== null}
           onSelectMonth={selectMonth}
-          onExplore={(filter) => setScreen({ name: 'EXPLORER', filter })}
+          onExplore={(filter) => openExplorer(filter, budget.currency)}
+          onUpdateAllocation={updateAllocation}
           onReset={resetDemo}
         />
-      ) : (
+      ) : queryState.status === 'READY' ? (
         <ExplorerScreen
           palette={palette}
           filter={screen.filter}
           currency={budget.currency}
-          transactions={snapshot.ledgerMonth.resolutionTransactions}
-          onBack={() => setScreen({ name: 'HOME' })}
+          queryResult={queryState.result}
+          onBack={() => {
+            setScreen({ name: 'HOME' });
+            setQueryState({ status: 'IDLE' });
+          }}
         />
+      ) : (
+        <QueryStateScreen palette={palette} status={queryState.status} />
       )}
     </SafeAreaView>
   );
@@ -323,6 +399,7 @@ function HomeScreen({
   busy,
   onSelectMonth,
   onExplore,
+  onUpdateAllocation,
   onReset,
 }: {
   readonly palette: Palette;
@@ -336,15 +413,87 @@ function HomeScreen({
   readonly busy: boolean;
   readonly onSelectMonth: (month: string) => void;
   readonly onExplore: (filter: ExplorerFilter) => void;
+  readonly onUpdateAllocation: (
+    monthKey: string,
+    currency: string,
+    budgetBaseMinor: number,
+    ratios: AllocationRatios,
+  ) => Promise<void>;
   readonly onReset: () => void;
 }) {
+  const storedRatios = useMemo(
+    () => ({
+      LIVING: budget.livingRatioBp,
+      SAVING: budget.savingRatioBp,
+      FUN: budget.funRatioBp,
+    }),
+    [budget.funRatioBp, budget.livingRatioBp, budget.savingRatioBp],
+  );
+  const [draftRatios, setDraftRatios] =
+    useState<AllocationRatios>(storedRatios);
+  const [allocationEditorOpen, setAllocationEditorOpen] = useState(false);
+  const [allocationError, setAllocationError] = useState<string | null>(null);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const previewBudget = useMemo(
+    () =>
+      createMonthlyBudget(
+        budget.monthKey,
+        budget.currency,
+        budget.budgetBaseMinor,
+        draftRatios,
+        budget.updatedAt,
+      ),
+    [budget, draftRatios],
+  );
   const viewModel = useMemo(
-    () => createHomeViewModel(budget, summary, transactions),
-    [budget, summary, transactions],
+    () => createHomeViewModel(previewBudget, summary, transactions),
+    [previewBudget, summary, transactions],
+  );
+  const heatMap = useMemo(
+    () =>
+      createMonthlyHeatMap(
+        budget.monthKey,
+        previewBudget.livingTargetMinor,
+        previewBudget.funTargetMinor,
+        summary.dailyIncludedSpendMinor,
+      ),
+    [
+      budget.monthKey,
+      previewBudget.funTargetMinor,
+      previewBudget.livingTargetMinor,
+      summary.dailyIncludedSpendMinor,
+    ],
+  );
+  const allocationEditable = budget.closedAt === null;
+  const commitAllocation = useCallback(
+    async (ratios: AllocationRatios) => {
+      setDraftRatios(ratios);
+      setAllocationError(null);
+      try {
+        await onUpdateAllocation(
+          budget.monthKey,
+          budget.currency,
+          budget.budgetBaseMinor,
+          ratios,
+        );
+        return true;
+      } catch {
+        setDraftRatios(storedRatios);
+        setAllocationError(
+          'The allocation could not be saved to this local month.',
+        );
+        return false;
+      }
+    },
+    [budget, onUpdateAllocation, storedRatios],
   );
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
+      onScroll={({ nativeEvent }) =>
+        setScrollOffset(nativeEvent.contentOffset.y)
+      }
+      scrollEventThrottle={32}
       testID="home-screen"
     >
       <View style={styles.topRow}>
@@ -406,17 +555,21 @@ function HomeScreen({
       <Text style={[styles.sectionKicker, { color: palette.accent }]}>
         MONTHLY PLAN
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Monthly allocation. Budget base ${viewModel.budgetBaseLabel}. ${viewModel.allocationLabel}. Open all transactions for ${viewModel.monthLabel}.`}
-        onPress={() => onExplore({ month: budget.monthKey })}
+      <View
+        accessibilityLabel={`Monthly allocation. Budget base ${viewModel.budgetBaseLabel}. ${viewModel.allocationLabel}.`}
         style={[
           styles.allocationPanel,
           { backgroundColor: palette.surface, borderColor: palette.border },
         ]}
-        testID="budget-base-drilldown"
+        testID="allocation-panel"
       >
-        <View style={styles.allocationHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Budget base ${viewModel.budgetBaseLabel}. Open monthly Breakdown.`}
+          onPress={() => onExplore(monthQuery(budget.monthKey))}
+          style={styles.allocationHeader}
+          testID="budget-base-drilldown"
+        >
           <View>
             <Text style={[styles.label, { color: palette.muted }]}>
               AVAILABLE TO ALLOCATE
@@ -428,43 +581,90 @@ function HomeScreen({
           <Text style={[styles.ratioHero, { color: palette.text }]}>
             {viewModel.cards.map(({ ratioLabel }) => ratioLabel).join(' / ')}
           </Text>
-        </View>
-        <View
-          accessibilityLabel={viewModel.allocationLabel}
-          style={[styles.allocationTrack, { backgroundColor: palette.border }]}
-        >
-          {viewModel.cards.map((card) => (
-            <View
-              key={card.key}
-              style={{
-                flex: card.ratioBasisPoints,
-                backgroundColor: categoryColor(card.key, palette),
-              }}
-            />
-          ))}
-        </View>
-        {viewModel.cards.map((card) => (
-          <View key={card.key} style={styles.allocationRow}>
-            <View style={styles.identityRow}>
-              <View
-                style={[
-                  styles.identityDot,
-                  { backgroundColor: categoryColor(card.key, palette) },
-                ]}
-              />
-              <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
-                {card.title}
-              </Text>
-              <Text style={[styles.smallText, { color: palette.muted }]}>
-                {card.ratioLabel}
-              </Text>
-            </View>
-            <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
-              {card.targetLabel}
-            </Text>
+        </Pressable>
+        <View style={styles.allocationBody}>
+          <AllocationRing
+            editable={allocationEditable}
+            palette={palette}
+            ratios={draftRatios}
+            onChange={setDraftRatios}
+            onCommit={commitAllocation}
+          />
+          <View style={styles.allocationLegend}>
+            {viewModel.cards.map((card) => (
+              <View key={card.key} style={styles.allocationRow}>
+                <View style={styles.identityRow}>
+                  <View
+                    style={[
+                      styles.identityDot,
+                      { backgroundColor: categoryColor(card.key, palette) },
+                    ]}
+                  />
+                  <Text
+                    style={[styles.bodyTextStrong, { color: palette.text }]}
+                  >
+                    {card.title}
+                  </Text>
+                  <Text style={[styles.smallText, { color: palette.muted }]}>
+                    {card.ratioLabel}
+                  </Text>
+                </View>
+                <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
+                  {card.targetLabel}
+                </Text>
+              </View>
+            ))}
           </View>
-        ))}
-      </Pressable>
+        </View>
+        <View style={styles.allocationActions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!allocationEditable}
+            onPress={() => setAllocationEditorOpen(true)}
+            style={styles.secondaryButton}
+            testID="allocation-edit-numeric"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              Edit exact %
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!allocationEditable}
+            onPress={() => commitAllocation(DEFAULT_ALLOCATION)}
+            style={styles.secondaryButton}
+            testID="allocation-reset-default"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.muted }]}>
+              Reset 50 / 30 / 20
+            </Text>
+          </Pressable>
+        </View>
+        {!allocationEditable ? (
+          <Text style={[styles.smallText, { color: palette.muted }]}>
+            Historical allocation is read-only.
+          </Text>
+        ) : null}
+        {allocationError === null ? null : (
+          <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+            {allocationError}
+          </Text>
+        )}
+      </View>
+
+      {allocationEditorOpen ? (
+        <AllocationEditor
+          budget={budget}
+          palette={palette}
+          ratios={draftRatios}
+          onCancel={() => setAllocationEditorOpen(false)}
+          onSave={async (ratios) => {
+            if (await commitAllocation(ratios)) {
+              setAllocationEditorOpen(false);
+            }
+          }}
+        />
+      ) : null}
 
       {viewModel.needsReviewLabel === null ? null : (
         <View
@@ -498,52 +698,30 @@ function HomeScreen({
             key={card.key}
             card={card}
             palette={palette}
+            scrollOffset={scrollOffset}
             onPress={() => onExplore(card.filter)}
           />
         ))}
       </View>
 
       <Text style={[styles.sectionKicker, { color: palette.accent }]}>
-        RECENT PACE
+        MONTHLY SPENDING PACE
       </Text>
       <Text style={[styles.bodyText, { color: palette.muted }]}>
-        Included Living and Fun activity. Full calendar pacing arrives in the
-        Heat Map layer.
+        Included Living and Fun spend only. Daily reference:{' '}
+        {formatDailyReference(heatMap, budget.currency)}.
       </Text>
-      <View
-        style={[
-          styles.activityList,
-          { backgroundColor: palette.surface, borderColor: palette.border },
-        ]}
-      >
-        {Object.entries(summary.dailyIncludedSpendMinor)
-          .slice(0, 5)
-          .map(([date, amountMinor]) => (
-            <Pressable
-              key={date}
-              accessibilityRole="button"
-              accessibilityLabel={`Open spending on ${date}`}
-              onPress={() => onExplore({ month: budget.monthKey, date })}
-              style={[
-                styles.activityRow,
-                { borderBottomColor: palette.border },
-              ]}
-              testID={`day-${date}`}
-            >
-              <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
-                {formatActivityDate(date)}
-              </Text>
-              <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
-                {formatMoney(money(amountMinor, budget.currency), 'en-GB')}
-              </Text>
-            </Pressable>
-          ))}
-      </View>
+      <HeatMapCalendar
+        currency={budget.currency}
+        heatMap={heatMap}
+        onSelectDate={(date) => onExplore(dayQuery(date))}
+        palette={palette}
+      />
       <CoreNavigation
         active="HOME"
         palette={palette}
         onHome={() => undefined}
-        onBreakdown={() => onExplore({ month: budget.monthKey })}
+        onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
       />
     </ScrollView>
   );
@@ -552,10 +730,12 @@ function HomeScreen({
 function BudgetCard({
   card,
   palette,
+  scrollOffset,
   onPress,
 }: {
   readonly card: ReturnType<typeof createHomeViewModel>['cards'][number];
   readonly palette: Palette;
+  readonly scrollOffset: number;
   readonly onPress: () => void;
 }) {
   const progressWidth = progressPercent(card.percentageLabel);
@@ -600,20 +780,31 @@ function BudgetCard({
           {card.percentageLabel}
         </Text>
       </View>
-      <View
-        accessibilityLabel={`${card.percentageLabel} of target`}
-        style={[styles.track, { backgroundColor: palette.surfaceMuted }]}
-      >
+      {card.key === 'SAVING' ? (
         <View
-          style={[
-            styles.progress,
-            {
-              width: `${progressWidth}%`,
-              backgroundColor: card.isOver ? palette.breach : identityColor,
-            },
-          ]}
+          accessibilityLabel={`${card.percentageLabel} of target`}
+          style={[styles.track, { backgroundColor: palette.surfaceMuted }]}
+        >
+          <View
+            style={[
+              styles.progress,
+              {
+                width: `${progressWidth}%`,
+                backgroundColor: identityColor,
+              },
+            ]}
+          />
+        </View>
+      ) : (
+        <RunoverVisual
+          actualMinor={Math.max(0, card.actualMinor)}
+          identityColor={identityColor}
+          palette={palette}
+          percentageLabel={card.percentageLabel}
+          scrollOffset={scrollOffset}
+          targetMinor={card.targetMinor}
         />
-      </View>
+      )}
       {card.secondaryLabel === undefined ? null : (
         <Text style={[styles.smallText, { color: palette.warning }]}>
           {card.secondaryLabel}
@@ -623,28 +814,448 @@ function BudgetCard({
   );
 }
 
+const RUNOVER_ROW_HEIGHT = 18;
+const RUNOVER_WINDOW_SIZE = 36;
+
+function RunoverVisual({
+  actualMinor,
+  identityColor,
+  palette,
+  percentageLabel,
+  scrollOffset,
+  targetMinor,
+}: {
+  readonly actualMinor: number;
+  readonly identityColor: string;
+  readonly palette: Palette;
+  readonly percentageLabel: string;
+  readonly scrollOffset: number;
+  readonly targetMinor: number;
+}) {
+  const model = useMemo(
+    () => createRunoverModel(actualMinor, targetMinor),
+    [actualMinor, targetMinor],
+  );
+  const container = useRef<View>(null);
+  const [contentY, setContentY] = useState(0);
+  const start = model.virtualized
+    ? Math.max(
+        0,
+        Math.floor((scrollOffset - contentY) / RUNOVER_ROW_HEIGHT) - 6,
+      )
+    : 0;
+  const end = model.virtualized
+    ? Math.min(model.rowCount, start + RUNOVER_WINDOW_SIZE)
+    : model.rowCount;
+  const visibleRows = Array.from({ length: end - start }, (_, offset) =>
+    runoverRow(model, start + offset),
+  );
+
+  if (model.rowCount === 0) {
+    return (
+      <View
+        accessibilityLabel={`${percentageLabel}. ${model.accessibilityRowSummary}`}
+        style={[styles.track, { backgroundColor: palette.surfaceMuted }]}
+      />
+    );
+  }
+
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${percentageLabel} of target. ${model.accessibilityRowSummary}`}
+      onLayout={() =>
+        container.current?.measureInWindow((_x, y) =>
+          setContentY(y + scrollOffset),
+        )
+      }
+      ref={container}
+      style={[
+        styles.runoverContainer,
+        { height: model.rowCount * RUNOVER_ROW_HEIGHT },
+      ]}
+      testID="runover-visual"
+    >
+      <View
+        importantForAccessibility="no-hide-descendants"
+        style={StyleSheet.absoluteFill}
+      >
+        {visibleRows.map((row) => (
+          <View
+            key={row.index}
+            style={[
+              styles.runoverTrack,
+              {
+                backgroundColor: palette.surfaceMuted,
+                top: row.index * RUNOVER_ROW_HEIGHT,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.runoverFill,
+                {
+                  width: `${row.fillBasisPoints / 100}%`,
+                  backgroundColor:
+                    row.tone === 'IDENTITY' ? identityColor : palette.breach,
+                },
+              ]}
+              testID={
+                row.index === 0 ? 'runover-identity-row' : 'runover-breach-row'
+              }
+            />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const RING_SIZE = 190;
+const RING_CENTER = RING_SIZE / 2;
+const RING_RADIUS = 70;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function AllocationRing({
+  editable,
+  palette,
+  ratios,
+  onChange,
+  onCommit,
+}: {
+  readonly editable: boolean;
+  readonly palette: Palette;
+  readonly ratios: AllocationRatios;
+  readonly onChange: (ratios: AllocationRatios) => void;
+  readonly onCommit: (ratios: AllocationRatios) => Promise<boolean>;
+}) {
+  const activeBoundary = useRef<'LIVING' | 'SAVING' | null>(null);
+  const ratiosRef = useRef(ratios);
+  const savingEnd = ratios.LIVING + ratios.SAVING;
+  const chooseBoundary = (event: GestureResponderEvent) => {
+    ratiosRef.current = ratios;
+    const basisPoints = touchBasisPoints(event);
+    activeBoundary.current =
+      circularDistance(basisPoints, ratios.LIVING) <=
+      circularDistance(basisPoints, savingEnd)
+        ? 'LIVING'
+        : 'SAVING';
+  };
+  const updateBoundary = (event: GestureResponderEvent) => {
+    if (!editable || activeBoundary.current === null) {
+      return;
+    }
+    const touched = touchBasisPoints(event);
+    const current = ratiosRef.current;
+    const currentSavingEnd = current.LIVING + current.SAVING;
+    const next =
+      activeBoundary.current === 'LIVING'
+        ? ratiosFromBoundaries(
+            Math.min(touched, currentSavingEnd),
+            currentSavingEnd,
+          )
+        : ratiosFromBoundaries(
+            current.LIVING,
+            Math.max(touched, current.LIVING),
+          );
+    ratiosRef.current = next;
+    onChange(next);
+  };
+
+  return (
+    <View
+      accessibilityLabel={`Interactive allocation ring. Living ${formatBasisPointLabel(ratios.LIVING)}, Saving ${formatBasisPointLabel(ratios.SAVING)}, Fun ${formatBasisPointLabel(ratios.FUN)}. ${editable ? 'Drag either boundary or use Edit exact percent.' : 'Historical allocation is read-only.'}`}
+      onMoveShouldSetResponder={() => editable}
+      onResponderGrant={(event) => {
+        chooseBoundary(event);
+        updateBoundary(event);
+      }}
+      onResponderMove={updateBoundary}
+      onResponderRelease={() => {
+        activeBoundary.current = null;
+        void onCommit(ratiosRef.current);
+      }}
+      onStartShouldSetResponder={() => editable}
+      style={styles.ringContainer}
+      testID="allocation-ring"
+    >
+      <Svg height={RING_SIZE} width={RING_SIZE}>
+        <G origin={`${RING_CENTER}, ${RING_CENTER}`} rotation="-90">
+          {[
+            {
+              key: 'LIVING',
+              ratio: ratios.LIVING,
+              start: 0,
+              color: palette.living,
+            },
+            {
+              key: 'SAVING',
+              ratio: ratios.SAVING,
+              start: ratios.LIVING,
+              color: palette.saving,
+            },
+            {
+              key: 'FUN',
+              ratio: ratios.FUN,
+              start: savingEnd,
+              color: palette.fun,
+            },
+          ].map((segment) => (
+            <Circle
+              key={segment.key}
+              cx={RING_CENTER}
+              cy={RING_CENTER}
+              fill="transparent"
+              r={RING_RADIUS}
+              stroke={segment.color}
+              strokeDasharray={`${(RING_CIRCUMFERENCE * segment.ratio) / 10_000} ${RING_CIRCUMFERENCE}`}
+              strokeDashoffset={-(RING_CIRCUMFERENCE * segment.start) / 10_000}
+              strokeWidth={28}
+            />
+          ))}
+        </G>
+      </Svg>
+      <View pointerEvents="none" style={styles.ringLabel}>
+        <Text style={[styles.ringRatio, { color: palette.text }]}>
+          {formatBasisPointLabel(ratios.LIVING)} /{' '}
+          {formatBasisPointLabel(ratios.SAVING)} /{' '}
+          {formatBasisPointLabel(ratios.FUN)}
+        </Text>
+        <Text style={[styles.smallText, { color: palette.muted }]}>
+          {editable ? 'DRAG BOUNDARIES' : 'HISTORICAL'}
+        </Text>
+      </View>
+      {[ratios.LIVING, savingEnd].map((boundary, index) => {
+        const position = boundaryPosition(boundary);
+        return (
+          <View
+            key={index === 0 ? 'living-boundary' : 'saving-boundary'}
+            pointerEvents="none"
+            style={[
+              styles.ringHandle,
+              {
+                backgroundColor: palette.text,
+                left: position.x - 15,
+                top: position.y - 15,
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+function AllocationEditor({
+  budget,
+  palette,
+  ratios,
+  onCancel,
+  onSave,
+}: {
+  readonly budget: NonNullable<LedgerSnapshot['ledgerMonth']>['budget'];
+  readonly palette: Palette;
+  readonly ratios: AllocationRatios;
+  readonly onCancel: () => void;
+  readonly onSave: (ratios: AllocationRatios) => Promise<void>;
+}) {
+  const [living, setLiving] = useState(formatBasisPointInput(ratios.LIVING));
+  const [saving, setSaving] = useState(formatBasisPointInput(ratios.SAVING));
+  const [fun, setFun] = useState(formatBasisPointInput(ratios.FUN));
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Modal animationType="none" onRequestClose={onCancel} transparent visible>
+      <View style={styles.modalBackdrop}>
+        <View
+          style={[
+            styles.modalCard,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+          ]}
+        >
+          <Text style={[styles.cardTitle, { color: palette.text }]}>
+            Edit monthly allocation
+          </Text>
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            Percentages use up to two decimal places and must total exactly
+            100%. Changes apply only to {budget.monthKey}.
+          </Text>
+          {[
+            ['Living', living, setLiving, palette.living],
+            ['Saving', saving, setSaving, palette.saving],
+            ['Fun', fun, setFun, palette.fun],
+          ].map(([label, value, setter, color]) => (
+            <View key={String(label)} style={styles.editorRow}>
+              <Text style={[styles.bodyTextStrong, { color: String(color) }]}>
+                {String(label)}
+              </Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  accessibilityLabel={`${String(label)} percentage`}
+                  keyboardType="decimal-pad"
+                  onChangeText={setter as (value: string) => void}
+                  selectTextOnFocus
+                  style={[
+                    styles.percentageInput,
+                    {
+                      borderColor: palette.border,
+                      color: palette.text,
+                    },
+                  ]}
+                  value={String(value)}
+                />
+                <Text style={[styles.bodyText, { color: palette.muted }]}>
+                  %
+                </Text>
+              </View>
+            </View>
+          ))}
+          {error === null ? null : (
+            <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+              {error}
+            </Text>
+          )}
+          <View style={styles.modalActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCancel}
+              style={styles.secondaryButton}
+            >
+              <Text style={[styles.smallButtonText, { color: palette.muted }]}>
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                try {
+                  const next = parseAllocationPercentages(living, saving, fun);
+                  setError(null);
+                  void onSave(next);
+                } catch {
+                  setError('Enter percentages that total exactly 100%.');
+                }
+              }}
+              style={[styles.modalSave, { backgroundColor: palette.accent }]}
+              testID="allocation-save"
+            >
+              <Text
+                style={[styles.smallButtonText, { color: palette.accentText }]}
+              >
+                Save allocation
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function HeatMapCalendar({
+  currency,
+  heatMap,
+  onSelectDate,
+  palette,
+}: {
+  readonly currency: string;
+  readonly heatMap: MonthlyHeatMap;
+  readonly onSelectDate: (date: string) => void;
+  readonly palette: Palette;
+}) {
+  return (
+    <View
+      style={[
+        styles.heatMapPanel,
+        { backgroundColor: palette.surface, borderColor: palette.border },
+      ]}
+      testID="monthly-heat-map"
+    >
+      <View style={styles.weekRow}>
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+          <Text key={day} style={[styles.weekLabel, { color: palette.muted }]}>
+            {day.slice(0, 1)}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.calendarGrid}>
+        {Array.from({ length: heatMap.leadingBlankCount }, (_, index) => (
+          <View key={`blank:${index}`} style={styles.calendarCell} />
+        ))}
+        {heatMap.days.map((day) => (
+          <Pressable
+            key={day.date}
+            accessibilityRole="button"
+            accessibilityLabel={`${formatActivityDate(day.date)}. ${formatMoney(money(day.amountMinor, currency), 'en-GB')}. ${day.status}. Open exact-date Breakdown.`}
+            onPress={() => onSelectDate(day.date)}
+            style={[
+              styles.calendarCell,
+              { backgroundColor: heatColor(day, palette) },
+            ]}
+            testID={`day-${day.date}`}
+          >
+            <Text style={[styles.calendarDay, { color: palette.text }]}>
+              {day.day}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.heatLegend}>
+        <View
+          style={[
+            styles.legendSwatch,
+            { backgroundColor: palette.surfaceMuted },
+          ]}
+        />
+        <Text style={[styles.legendText, { color: palette.muted }]}>£0</Text>
+        <View
+          style={[styles.legendGradientGreen, { backgroundColor: palette.fun }]}
+        />
+        <Text style={[styles.legendText, { color: palette.muted }]}>
+          daily reference
+        </Text>
+        <View
+          style={[
+            styles.legendGradientRed,
+            { backgroundColor: palette.breach },
+          ]}
+        />
+        <Text style={[styles.legendText, { color: palette.muted }]}>
+          monthly cap+
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function ExplorerScreen({
   palette,
   filter,
   currency,
-  transactions,
+  queryResult,
   onBack,
 }: {
   readonly palette: Palette;
   readonly filter: ExplorerFilter;
   readonly currency: string;
-  readonly transactions: NonNullable<
-    LedgerSnapshot['ledgerMonth']
-  >['transactions'];
+  readonly queryResult: LedgerQueryResult;
   readonly onBack: () => void;
 }) {
   const viewModel = useMemo(
-    () => createExplorerViewModel(transactions, filter, currency),
-    [currency, filter, transactions],
+    () =>
+      createExplorerViewModel(
+        queryResult.matches,
+        queryResult.resolutionTransactions,
+        filter,
+        currency,
+      ),
+    [currency, filter, queryResult],
   );
   const categorizedIds = new Set(
-    viewModel.breakdown.flatMap((item) =>
-      item.transactions.map((transaction) => transaction.id),
+    viewModel.superCategories.flatMap((superCategory) =>
+      superCategory.categories.flatMap((category) =>
+        category.transactions.map((transaction) => transaction.id),
+      ),
     ),
   );
   const otherTransactions = viewModel.transactions.filter(
@@ -675,6 +1286,7 @@ function ExplorerScreen({
       <Text style={[styles.bodyText, { color: palette.muted }]}>
         {viewModel.periodLabel} · {viewModel.transactionCountLabel}
       </Text>
+      <QueryChips filter={filter} palette={palette} />
 
       <View style={styles.summaryRow}>
         <SummaryMetric
@@ -694,58 +1306,116 @@ function ExplorerScreen({
       <Text style={[styles.sectionTitle, { color: palette.text }]}>
         Where it went
       </Text>
-      {viewModel.breakdown.length === 0 ? (
+      {viewModel.superCategories.length === 0 ? (
         <Text style={[styles.bodyText, { color: palette.muted }]}>
           No category budget effects for this filter.
         </Text>
       ) : (
-        viewModel.breakdown.map((item) => (
+        viewModel.superCategories.map((superCategory) => (
           <View
-            key={item.key}
+            key={superCategory.key}
             style={[
-              styles.breakdownGroup,
+              styles.superCategoryGroup,
               { backgroundColor: palette.surface, borderColor: palette.border },
             ]}
           >
-            <View style={styles.breakdownHeader}>
-              <View style={styles.breakdownTitleBlock}>
-                <Text style={[styles.cardTitle, { color: palette.text }]}>
-                  {item.label}
-                </Text>
+            <View style={styles.superCategoryHeader}>
+              <View style={styles.identityRow}>
                 <View
-                  accessibilityLabel={`${item.percentageLabel} of this breakdown`}
                   style={[
-                    styles.categoryTrack,
-                    { backgroundColor: palette.surfaceMuted },
+                    styles.identityDot,
+                    {
+                      backgroundColor: categoryColor(
+                        superCategory.key,
+                        palette,
+                      ),
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.superCategoryTitle,
+                    {
+                      color: categoryColor(superCategory.key, palette),
+                    },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.categoryFill,
-                      {
-                        width: `${progressPercent(item.percentageLabel)}%`,
-                        backgroundColor: explorerAccent(filter, palette),
-                      },
-                    ]}
-                  />
-                </View>
+                  {superCategory.label}
+                </Text>
               </View>
               <View style={styles.breakdownAmount}>
-                <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
-                  {item.amountLabel}
+                <Text style={[styles.cardTitle, { color: palette.text }]}>
+                  {superCategory.amountLabel}
                 </Text>
                 <Text style={[styles.smallText, { color: palette.muted }]}>
-                  {item.percentageLabel}
+                  {superCategory.percentageLabel} of allocation activity
                 </Text>
               </View>
             </View>
-            {item.transactions.map((transaction) => (
-              <TransactionTreeRow
-                key={`${item.key}:${transaction.id}`}
-                transaction={transaction}
-                palette={palette}
-              />
-            ))}
+            {superCategory.categories.length === 0 ? (
+              <Text style={[styles.smallText, { color: palette.muted }]}>
+                No matching category activity.
+              </Text>
+            ) : (
+              superCategory.categories.map((item) => (
+                <View
+                  key={item.key}
+                  style={[
+                    styles.categoryGroup,
+                    { borderTopColor: palette.border },
+                  ]}
+                >
+                  <View style={styles.breakdownHeader}>
+                    <View style={styles.breakdownTitleBlock}>
+                      <Text
+                        style={[styles.bodyTextStrong, { color: palette.text }]}
+                      >
+                        {item.label}
+                      </Text>
+                      <View
+                        accessibilityLabel={`${item.percentageLabel} of ${superCategory.label}`}
+                        style={[
+                          styles.categoryTrack,
+                          { backgroundColor: palette.surfaceMuted },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.categoryFill,
+                            {
+                              width: `${progressPercent(item.percentageLabel)}%`,
+                              backgroundColor: categoryColor(
+                                superCategory.key,
+                                palette,
+                              ),
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.breakdownAmount}>
+                      <Text
+                        style={[styles.bodyTextStrong, { color: palette.text }]}
+                      >
+                        {item.amountLabel}
+                      </Text>
+                      <Text
+                        style={[styles.smallText, { color: palette.muted }]}
+                      >
+                        {item.percentageLabel}
+                      </Text>
+                    </View>
+                  </View>
+                  {item.transactions.map((transaction) => (
+                    <TransactionTreeRow
+                      key={`${item.key}:${transaction.id}`}
+                      transaction={transaction}
+                      palette={palette}
+                    />
+                  ))}
+                </View>
+              ))
+            )}
           </View>
         ))
       )}
@@ -791,6 +1461,80 @@ function ExplorerScreen({
         onBreakdown={() => undefined}
       />
     </ScrollView>
+  );
+}
+
+function QueryChips({
+  filter,
+  palette,
+}: {
+  readonly filter: ExplorerFilter;
+  readonly palette: Palette;
+}) {
+  const labels = [
+    filter.date.kind === 'MONTH'
+      ? `Month ${filter.date.month}`
+      : filter.date.kind === 'DAY'
+        ? `Day ${filter.date.date}`
+        : `${filter.date.startDate} to ${filter.date.endDate}`,
+    ...(filter.superCategories ?? []).map(
+      (key) => ({ LIVING: 'Living', SAVING: 'Saving', FUN: 'Fun' })[key],
+    ),
+    ...(filter.categoryIds ?? []).map((id) => `Category ${id}`),
+    ...(filter.eventTypes ?? []).map((type) => `Type ${type}`),
+    ...(filter.scopes ?? []).map((scope) => `Scope ${scope}`),
+    ...(filter.merchant === undefined
+      ? []
+      : [`Merchant contains ${filter.merchant}`]),
+    ...(filter.amount === undefined
+      ? []
+      : [
+          `${filter.amount.comparator} ${filter.amount.thresholdMinor} minor units`,
+        ]),
+  ];
+  return (
+    <View accessibilityLabel="Active structured filters" style={styles.chipRow}>
+      {labels.map((label) => (
+        <View
+          key={label}
+          style={[
+            styles.filterChip,
+            {
+              backgroundColor: palette.surfaceMuted,
+              borderColor: palette.border,
+            },
+          ]}
+        >
+          <Text style={[styles.badgeText, { color: palette.text }]}>
+            {label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function QueryStateScreen({
+  palette,
+  status,
+}: {
+  readonly palette: Palette;
+  readonly status: Exclude<QueryLoadState, { status: 'READY' }>['status'];
+}) {
+  return (
+    <View style={styles.centered}>
+      {status === 'LOADING' ? (
+        <ActivityIndicator color={palette.accent} size="large" />
+      ) : null}
+      <Text style={[styles.heroTitle, { color: palette.text }]}>
+        {status === 'ERROR' ? 'Breakdown unavailable' : 'Loading Breakdown'}
+      </Text>
+      <Text style={[styles.heroBody, { color: palette.muted }]}>
+        {status === 'ERROR'
+          ? 'The local query could not be completed.'
+          : 'Applying structured local filters.'}
+      </Text>
+    </View>
   );
 }
 
@@ -1021,16 +1765,6 @@ function categoryColor(
   return palette.fun;
 }
 
-function explorerAccent(filter: ExplorerFilter, palette: Palette): string {
-  if (filter.superCategory === 'LIVING') {
-    return palette.living;
-  }
-  if (filter.superCategory === 'SAVING') {
-    return palette.saving;
-  }
-  return filter.superCategory === 'FUN' ? palette.fun : palette.accent;
-}
-
 function formatActivityDate(date: string): string {
   return new Intl.DateTimeFormat('en-GB', {
     weekday: 'short',
@@ -1038,6 +1772,81 @@ function formatActivityDate(date: string): string {
     month: 'short',
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00.000Z`));
+}
+
+function formatDailyReference(
+  heatMap: MonthlyHeatMap,
+  currency: string,
+): string {
+  const numerator = BigInt(heatMap.dailyReferenceNumeratorMinor);
+  const denominator = BigInt(heatMap.dailyReferenceDenominator);
+  const roundedMinor = Number((numerator + denominator / 2n) / denominator);
+  return formatMoney(money(roundedMinor, currency), 'en-GB');
+}
+
+function heatColor(
+  day: MonthlyHeatMap['days'][number],
+  palette: Palette,
+): string {
+  if (day.tone === 'NEUTRAL') {
+    return palette.surfaceMuted;
+  }
+  if (day.tone === 'GREEN') {
+    return mixHex(palette.surfaceMuted, palette.fun, day.intensityBasisPoints);
+  }
+  return mixHex('#6e4042', palette.breach, day.intensityBasisPoints);
+}
+
+function mixHex(start: string, end: string, basisPoints: number): string {
+  const startChannels = hexChannels(start);
+  const endChannels = hexChannels(end);
+  const channels = startChannels.map((channel, index) => {
+    const endChannel = endChannels[index] ?? channel;
+    return Math.round(
+      channel + ((endChannel - channel) * basisPoints) / 10_000,
+    );
+  });
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function hexChannels(value: string): readonly number[] {
+  const normalized = value.replace('#', '');
+  return [0, 2, 4].map((start) =>
+    Number.parseInt(normalized.slice(start, start + 2), 16),
+  );
+}
+
+function touchBasisPoints(event: GestureResponderEvent): number {
+  const x = event.nativeEvent.locationX - RING_CENTER;
+  const y = event.nativeEvent.locationY - RING_CENTER;
+  const angle = Math.atan2(y, x) + Math.PI / 2;
+  const normalized = angle < 0 ? angle + 2 * Math.PI : angle;
+  return Math.round((normalized * 10_000) / (2 * Math.PI));
+}
+
+function circularDistance(left: number, right: number): number {
+  const direct = Math.abs(left - right);
+  return Math.min(direct, 10_000 - direct);
+}
+
+function boundaryPosition(basisPoints: number): { x: number; y: number } {
+  const angle = (basisPoints * 2 * Math.PI) / 10_000 - Math.PI / 2;
+  return {
+    x: RING_CENTER + Math.cos(angle) * RING_RADIUS,
+    y: RING_CENTER + Math.sin(angle) * RING_RADIUS,
+  };
+}
+
+function formatBasisPointLabel(value: number): string {
+  return `${formatBasisPointInput(value)}%`;
+}
+
+function formatBasisPointInput(value: number): string {
+  const whole = Math.trunc(value / 100);
+  const fraction = value % 100;
+  return fraction === 0
+    ? String(whole)
+    : `${whole}.${fraction.toString().padStart(2, '0').replace(/0$/, '')}`;
 }
 
 function toLoadState(snapshot: LedgerSnapshot): LoadState {
@@ -1138,6 +1947,25 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 12,
   },
+  allocationBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    flexWrap: 'wrap',
+  },
+  allocationLegend: { flex: 1, minWidth: 170, gap: 4 },
+  allocationActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  secondaryButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  smallButtonText: { fontSize: 14, fontWeight: '800' },
   allocationTrack: {
     height: 14,
     borderRadius: 7,
@@ -1183,6 +2011,16 @@ const styles = StyleSheet.create({
   cardAmount: { fontSize: 24, fontWeight: '800' },
   track: { height: 10, borderRadius: 5, overflow: 'hidden' },
   progress: { height: 10, borderRadius: 5 },
+  runoverContainer: { position: 'relative', overflow: 'hidden' },
+  runoverTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: RUNOVER_ROW_HEIGHT - 3,
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  runoverFill: { height: RUNOVER_ROW_HEIGHT - 3, borderRadius: 5 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between' },
   sectionTitle: { marginTop: 12, fontSize: 20, fontWeight: '800' },
   activityList: {
@@ -1211,6 +2049,112 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 4,
   },
+  ringContainer: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringLabel: {
+    position: 'absolute',
+    width: RING_SIZE,
+    alignItems: 'center',
+  },
+  ringRatio: { fontSize: 17, fontWeight: '900' },
+  ringHandle: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 3,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  modalCard: { borderWidth: 1, borderRadius: 18, padding: 20, gap: 14 },
+  editorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  percentageInput: {
+    minWidth: 72,
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    textAlign: 'right',
+    fontSize: 17,
+  },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  modalSave: {
+    minHeight: 48,
+    minWidth: 90,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  heatMapPanel: { borderWidth: 1, borderRadius: 16, padding: 12, gap: 8 },
+  weekRow: { flexDirection: 'row' },
+  weekLabel: {
+    width: `${100 / 7}%`,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    padding: 3,
+  },
+  calendarDay: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heatLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  legendSwatch: { width: 16, height: 12, borderRadius: 3 },
+  legendGradientGreen: {
+    width: 42,
+    height: 12,
+    borderRadius: 3,
+    backgroundColor: '#177346',
+  },
+  legendGradientRed: {
+    width: 42,
+    height: 12,
+    borderRadius: 3,
+    backgroundColor: '#b4232d',
+  },
+  legendText: { fontSize: 10, fontWeight: '700' },
+  superCategoryGroup: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  superCategoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  superCategoryTitle: { fontSize: 22, fontWeight: '900' },
+  categoryGroup: { borderTopWidth: 1, paddingTop: 12, gap: 8 },
   breakdownGroup: {
     borderWidth: 1,
     borderRadius: 16,
@@ -1239,6 +2183,14 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   badgeText: { fontSize: 11, fontWeight: '700' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  filterChip: {
+    minHeight: 32,
+    borderWidth: 1,
+    borderRadius: 999,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
   coreNavigation: {
     marginTop: 16,
     borderWidth: 1,

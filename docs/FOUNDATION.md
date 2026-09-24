@@ -43,8 +43,16 @@ Persistence ports (src/data/database.ts)
 - `src/data/classification-repository.ts` stores app-owned interpretations
   separately and retains inactive history.
 - `src/data/expo-database.ts` is the only Expo SQLite adapter.
-- `src/data/demo-repository.ts` owns deterministic demo bootstrap, reset, and
-  read queries. Demo ownership rows ensure reset cannot delete unrelated data.
+- `src/data/demo-repository.ts` owns deterministic demo bootstrap, reset,
+  current-month allocation persistence, and parameterised typed queries. Demo
+  ownership rows ensure reset cannot delete unrelated data.
+- `src/domain/query.ts` is the canonical query contract shared by Home,
+  Breakdown, and future Trends/Subscriptions. No UI value is interpolated into
+  SQL.
+- `src/domain/analytics.ts` defines future Trends series without ambiguously
+  merging Living/Fun spending, Saving contributions, and net savings movement.
+- `src/app/allocation.ts` and `src/app/heat-map.ts` hold exact, React-free
+  interaction math for the allocation ring, runover, and calendar.
 - `src/app/view-models.ts` converts semantic-engine output into Home and
   Explorer labels and typed drill-down filters without importing React Native.
 - `src/app/startup.ts` is the composition boundary. It may depend on Expo and
@@ -87,7 +95,7 @@ Future startup work must preserve this order:
   account numbers, or real personal data.
 - Fixture IDs and clocks are explicit. Tests must not depend on wall-clock time,
   random IDs, locale defaults, or execution order.
-- The interactive demo includes ordinary spend, a split, saving contributions
+- The interactive demo includes ordinary spend, an included runover example, a split, saving contributions
   and withdrawal, internal transfer, linked refund and reimbursement, explicit
   exclusions, historical targets, low-confidence review, a large legal amount,
   and an annual subscription represented only as underlying spend metadata.
@@ -104,9 +112,11 @@ npm run lint
 npm run format:check
 ```
 
-Pure view-model tests cover Home/Explorer behavior and exact drill-down filter
-contracts. SQLite integration tests cover demo load, idempotency, historical
-targets, classified reads, and ownership-safe reset.
+Pure selector/view-model tests cover allocation invariants, runover geometry,
+heat-map boundaries, Home/Explorer behavior, and exact drill-down contracts.
+SQLite integration tests cover demo load, idempotency, current-only allocation
+persistence, historical targets, typed parameterised queries, classified reads,
+and ownership-safe reset.
 
 Android was the locally available runtime for this foundation smoke test. An
 iOS runtime smoke test remains a platform validation step when a supported

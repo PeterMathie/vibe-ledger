@@ -4,20 +4,18 @@ import {
 } from '../domain/budget';
 import type { SuperCategoryKey } from '../domain/enums';
 import { formatMoney, money } from '../domain/money';
+import type { LedgerQuery } from '../domain/query';
 import type { ClassifiedTransaction, MonthlyBudget } from '../domain/types';
 
-export interface ExplorerFilter {
-  readonly month: string;
-  readonly date?: string;
-  readonly superCategory?: SuperCategoryKey;
-  readonly categoryId?: string;
-}
+export type ExplorerFilter = LedgerQuery;
 
 export interface HomeCardViewModel {
   readonly key: SuperCategoryKey;
   readonly title: string;
   readonly actualLabel: string;
   readonly targetLabel: string;
+  readonly actualMinor: number;
+  readonly targetMinor: number;
   readonly ratioLabel: string;
   readonly ratioBasisPoints: number;
   readonly statusLabel: string;
@@ -51,9 +49,19 @@ export interface ExplorerTransactionViewModel {
 export interface ExplorerBreakdownViewModel {
   readonly key: string;
   readonly label: string;
+  readonly superCategory: SuperCategoryKey;
+  readonly amountMinor: number;
   readonly amountLabel: string;
   readonly percentageLabel: string;
   readonly transactions: readonly ExplorerTransactionViewModel[];
+}
+
+export interface ExplorerSuperCategoryViewModel {
+  readonly key: SuperCategoryKey;
+  readonly label: string;
+  readonly amountLabel: string;
+  readonly percentageLabel: string;
+  readonly categories: readonly ExplorerBreakdownViewModel[];
 }
 
 export interface ExplorerViewModel {
@@ -63,6 +71,7 @@ export interface ExplorerViewModel {
   readonly excludedSpendLabel: string | null;
   readonly transactionCountLabel: string;
   readonly breakdown: readonly ExplorerBreakdownViewModel[];
+  readonly superCategories: readonly ExplorerSuperCategoryViewModel[];
   readonly transactions: readonly ExplorerTransactionViewModel[];
 }
 
@@ -139,16 +148,17 @@ export function createHomeViewModel(
 }
 
 export function createExplorerViewModel(
-  allTransactions: readonly ClassifiedTransaction[],
-  filter: ExplorerFilter,
+  transactions: readonly ClassifiedTransaction[],
+  resolutionTransactions: readonly ClassifiedTransaction[],
+  filter: LedgerQuery,
   currency: string,
   locale = 'en-GB',
 ): ExplorerViewModel {
   const byId = new Map(
-    allTransactions.map((transaction) => [transaction.raw.id, transaction]),
-  );
-  const transactions = allTransactions.filter((transaction) =>
-    matchesFilter(transaction, filter, byId),
+    resolutionTransactions.map((transaction) => [
+      transaction.raw.id,
+      transaction,
+    ]),
   );
   let includedSpendMinor = 0;
   let excludedSpendMinor = 0;
@@ -156,6 +166,7 @@ export function createExplorerViewModel(
     string,
     {
       label: string;
+      superCategory: SuperCategoryKey;
       amountMinor: number;
       transactionIds: Set<string>;
     }
@@ -187,14 +198,14 @@ export function createExplorerViewModel(
     const effect = explainBudgetEffect(transaction, byId);
     const contributions = categoryContributions(transaction, byId).filter(
       (contribution) =>
-        (filter.categoryId === undefined ||
-          contribution.key === filter.categoryId) &&
-        (filter.superCategory === undefined ||
-          contribution.superCategory === filter.superCategory),
+        (filter.categoryIds === undefined ||
+          filter.categoryIds.includes(contribution.key)) &&
+        (filter.superCategories === undefined ||
+          filter.superCategories.includes(contribution.superCategory)),
     );
     includedSpendMinor = addSafe(
       includedSpendMinor,
-      filter.categoryId === undefined && filter.superCategory === undefined
+      filter.categoryIds === undefined && filter.superCategories === undefined
         ? effect.includedSpendingMinor
         : contributions.reduce(
             (total, contribution) =>
@@ -209,6 +220,7 @@ export function createExplorerViewModel(
       const existing = categoryTotals.get(contribution.key);
       categoryTotals.set(contribution.key, {
         label: contribution.label,
+        superCategory: contribution.superCategory,
         amountMinor: addSafe(
           existing?.amountMinor ?? 0,
           contribution.amountMinor,
@@ -221,10 +233,6 @@ export function createExplorerViewModel(
     }
   }
 
-  const percentageDenominator = [...categoryTotals.values()].reduce(
-    (total, item) => addSafe(total, Math.abs(item.amountMinor)),
-    0,
-  );
   const transactionRows = transactions.map((transaction) =>
     transactionRow(transaction, byId, locale),
   );
@@ -240,20 +248,57 @@ export function createExplorerViewModel(
     .map(([key, item]) => ({
       key,
       label: item.label,
+      superCategory: item.superCategory,
+      amountMinor: item.amountMinor,
       amountLabel: formatMinor(item.amountMinor, currency, locale),
-      percentageLabel: formatRatio(
-        Math.abs(item.amountMinor),
-        percentageDenominator,
-      ),
+      percentageLabel: '',
       transactions: [...item.transactionIds].flatMap((id) => {
         const transaction = transactionRowsById.get(id);
         return transaction === undefined ? [] : [transaction];
       }),
     }));
+  const superOrder: readonly SuperCategoryKey[] = ['LIVING', 'SAVING', 'FUN'];
+  const superTotals = new Map(
+    superOrder.map((key) => [
+      key,
+      breakdown
+        .filter(({ superCategory }) => superCategory === key)
+        .reduce(
+          (total, category) => addSafe(total, Math.abs(category.amountMinor)),
+          0,
+        ),
+    ]),
+  );
+  const overallTotal = [...superTotals.values()].reduce(addSafe, 0);
+  const superCategories = superOrder.flatMap((key) => {
+    const total = superTotals.get(key) ?? 0;
+    const categories = breakdown
+      .filter(({ superCategory }) => superCategory === key)
+      .map((category) => ({
+        ...category,
+        percentageLabel: formatRatio(Math.abs(category.amountMinor), total),
+      }));
+    if (
+      categories.length === 0 &&
+      filter.superCategories !== undefined &&
+      !filter.superCategories.includes(key)
+    ) {
+      return [];
+    }
+    return [
+      {
+        key,
+        label: SUPER_CATEGORY_LABELS[key],
+        amountLabel: formatMinor(total, currency, locale),
+        percentageLabel: formatRatio(total, overallTotal),
+        categories,
+      },
+    ];
+  });
 
   return {
     title: explorerTitle(filter),
-    periodLabel: filter.date ?? formatMonth(filter.month, locale),
+    periodLabel: formatPeriod(filter.date, locale),
     includedSpendLabel: formatMinor(includedSpendMinor, currency, locale),
     excludedSpendLabel:
       excludedSpendMinor === 0
@@ -261,37 +306,9 @@ export function createExplorerViewModel(
         : formatMinor(excludedSpendMinor, currency, locale),
     transactionCountLabel: `${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`,
     breakdown,
+    superCategories,
     transactions: transactionRows,
   };
-}
-
-export function matchesFilter(
-  transaction: ClassifiedTransaction,
-  filter: ExplorerFilter,
-  transactionById: ReadonlyMap<string, ClassifiedTransaction>,
-): boolean {
-  if (transaction.raw.createdAt.slice(0, 7) !== filter.month) {
-    return false;
-  }
-  if (
-    filter.date !== undefined &&
-    transaction.raw.createdAt.slice(0, 10) !== filter.date
-  ) {
-    return false;
-  }
-  const categories = effectiveCategories(transaction, transactionById);
-  if (
-    filter.superCategory !== undefined &&
-    !categories.some(
-      ({ superCategory }) => superCategory === filter.superCategory,
-    )
-  ) {
-    return false;
-  }
-  return (
-    filter.categoryId === undefined ||
-    categories.some(({ id }) => id === filter.categoryId)
-  );
 }
 
 function createCard(
@@ -311,6 +328,8 @@ function createCard(
     title: SUPER_CATEGORY_LABELS[key],
     actualLabel: formatMinor(actualMinor, currency, locale),
     targetLabel: formatMinor(targetMinor, currency, locale),
+    actualMinor,
+    targetMinor,
     ratioLabel: formatBasisPoints(ratioBp),
     ratioBasisPoints: ratioBp,
     statusLabel:
@@ -319,7 +338,10 @@ function createCard(
         : `${formatMinor(-difference, currency, locale)} over`,
     percentageLabel: formatRatio(actualMinor, targetMinor),
     isOver,
-    filter: { month, superCategory: key },
+    filter: {
+      date: { kind: 'MONTH', month },
+      superCategories: [key],
+    },
     ...(secondaryLabel === undefined ? {} : { secondaryLabel }),
   };
 }
@@ -408,7 +430,15 @@ function categoryContributions(
           label: category.name,
           superCategory: category.superCategory,
           amountMinor:
-            split.budgetScope === 'INCLUDED' ? split.amountMinorAbs : 0,
+            split.budgetScope !== 'INCLUDED'
+              ? 0
+              : split.eventType === 'REFUND' ||
+                  split.eventType === 'REIMBURSEMENT'
+                ? -split.amountMinorAbs
+                : split.eventType === 'SPEND' ||
+                    split.eventType === 'SAVING_CONTRIBUTION'
+                  ? split.amountMinorAbs
+                  : 0,
           spendEffectMinor:
             split.budgetScope === 'INCLUDED' && split.eventType === 'SPEND'
               ? split.amountMinorAbs
@@ -425,10 +455,12 @@ function categoryContributions(
   const absoluteAmount = Math.abs(transaction.raw.amountMinor);
   const amountMinor =
     classification.eventType === 'REFUND' ||
-    classification.eventType === 'REIMBURSEMENT' ||
-    classification.eventType === 'SAVING_WITHDRAWAL'
+    classification.eventType === 'REIMBURSEMENT'
       ? -absoluteAmount
-      : absoluteAmount;
+      : classification.eventType === 'SPEND' ||
+          classification.eventType === 'SAVING_CONTRIBUTION'
+        ? absoluteAmount
+        : 0;
   const spendEffectMinor =
     classification.eventType === 'SPEND' ||
     classification.eventType === 'REFUND' ||
@@ -465,16 +497,29 @@ function effectiveCategories(
 }
 
 function explorerTitle(filter: ExplorerFilter): string {
-  if (filter.categoryId !== undefined) {
+  if (filter.categoryIds !== undefined) {
     return 'Category details';
   }
-  if (filter.superCategory !== undefined) {
-    return `${SUPER_CATEGORY_LABELS[filter.superCategory]} details`;
+  if (filter.superCategories?.length === 1) {
+    const key = filter.superCategories[0];
+    return key === undefined
+      ? 'Breakdown'
+      : `${SUPER_CATEGORY_LABELS[key]} details`;
   }
-  if (filter.date !== undefined) {
+  if (filter.date.kind === 'DAY') {
     return 'Day details';
   }
-  return 'Explorer';
+  return 'Breakdown';
+}
+
+function formatPeriod(date: LedgerQuery['date'], locale: string): string {
+  if (date.kind === 'DAY') {
+    return date.date;
+  }
+  if (date.kind === 'MONTH') {
+    return formatMonth(date.month, locale);
+  }
+  return `${date.startDate} – ${date.endDate}`;
 }
 
 function formatMinor(

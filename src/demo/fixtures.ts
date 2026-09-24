@@ -6,7 +6,7 @@ import type {
 } from '../domain/enums';
 
 export const DEMO_DATASET_ID = 'vibe-ledger-synthetic-demo';
-export const DEMO_FIXTURE_VERSION = 1;
+export const DEMO_FIXTURE_VERSION = 2;
 export const DEMO_CLOCK = '2026-09-24T12:00:00.000Z';
 
 export interface DemoBudgetFixture {
@@ -271,6 +271,17 @@ export const DEMO_TRANSACTIONS: readonly DemoTransactionFixture[] = [
       classificationSource: 'DEFAULT',
       confidence: 'LOW',
       note: 'Needs review; no budget effect.',
+    },
+  ),
+  transaction(
+    'festival',
+    -130_000,
+    'SYNTHETIC FESTIVAL WEEKEND',
+    '2026-09-25T18:00:00.000Z',
+    'SPEND',
+    'category:cinema',
+    {
+      note: 'Included synthetic spend that demonstrates proportional runover.',
     },
   ),
   transaction(

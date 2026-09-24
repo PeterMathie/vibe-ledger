@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createExplorerViewModel,
   createHomeViewModel,
-  matchesFilter,
 } from '../src/app/view-models';
 import {
   importDemoData,
@@ -11,6 +10,7 @@ import {
   type LedgerMonth,
 } from '../src/data/demo-repository';
 import { migrateDatabase } from '../src/data/migrations';
+import { dayQuery, monthQuery } from '../src/domain/query';
 import { NodeDatabase } from './support/node-database';
 
 describe('Home and Explorer view models', () => {
@@ -53,23 +53,40 @@ describe('Home and Explorer view models', () => {
           actualLabel: '£1,045.00',
           targetLabel: '£1,500.00',
           statusLabel: '£455.00 left',
-          filter: { month: '2026-09', superCategory: 'LIVING' },
+          filter: {
+            date: { kind: 'MONTH', month: '2026-09' },
+            superCategories: ['LIVING'],
+          },
         }),
         expect.objectContaining({
           key: 'SAVING',
           actualLabel: '£900.00',
           statusLabel: '£0.00 to go',
           secondaryLabel: 'Net savings movement -£4,100.00',
-          filter: { month: '2026-09', superCategory: 'SAVING' },
+          filter: {
+            date: { kind: 'MONTH', month: '2026-09' },
+            superCategories: ['SAVING'],
+          },
+        }),
+        expect.objectContaining({
+          key: 'FUN',
+          actualLabel: '£1,363.20',
+          targetLabel: '£600.00',
+          statusLabel: '£763.20 over',
+          isOver: true,
         }),
       ]),
     );
   });
 
   it('honours the exact Home super-category drill-down payload', () => {
-    const filter = { month: '2026-09', superCategory: 'FUN' } as const;
+    const filter = {
+      ...monthQuery('2026-09'),
+      superCategories: ['FUN'],
+    } as const;
     const explorer = createExplorerViewModel(
       ledgerMonth.transactions,
+      ledgerMonth.resolutionTransactions,
       filter,
       ledgerMonth.budget.currency,
     );
@@ -85,6 +102,7 @@ describe('Home and Explorer view models', () => {
         'demo:holiday-hotel',
         'demo:tesco-split',
         'demo:coffee',
+        'demo:festival',
       ]),
     );
     expect(explorer.excludedSpendLabel).toBe('£100,700.00');
@@ -92,8 +110,12 @@ describe('Home and Explorer view models', () => {
 
   it('keeps split drill-down totals equal to the selected Home allocation', () => {
     const explorer = createExplorerViewModel(
+      ledgerMonth.transactions,
       ledgerMonth.resolutionTransactions,
-      { month: '2026-09', superCategory: 'LIVING' },
+      {
+        ...monthQuery('2026-09'),
+        superCategories: ['LIVING'],
+      },
       ledgerMonth.budget.currency,
     );
 
@@ -107,8 +129,11 @@ describe('Home and Explorer view models', () => {
 
   it('honours exact-date filters and exposes semantic status on every row', () => {
     const explorer = createExplorerViewModel(
-      ledgerMonth.transactions,
-      { month: '2026-09', date: '2026-09-03' },
+      ledgerMonth.transactions.filter(
+        ({ raw }) => raw.createdAt.slice(0, 10) === '2026-09-03',
+      ),
+      ledgerMonth.resolutionTransactions,
+      dayQuery('2026-09-03'),
       ledgerMonth.budget.currency,
     );
 
@@ -130,7 +155,8 @@ describe('Home and Explorer view models', () => {
   it('keeps excluded and neutral records visible without counting them', () => {
     const explorer = createExplorerViewModel(
       ledgerMonth.transactions,
-      { month: '2026-09' },
+      ledgerMonth.resolutionTransactions,
+      monthQuery('2026-09'),
       ledgerMonth.budget.currency,
     );
 
@@ -141,25 +167,6 @@ describe('Home and Explorer view models', () => {
       typeLabel: 'Ignore / neutral',
       confidenceLabel: 'Needs review',
     });
-  });
-
-  it('matches refunds through their linked original category', () => {
-    const refund = ledgerMonth.transactions.find(
-      ({ raw }) => raw.id === 'demo:clothing-refund',
-    );
-    if (refund === undefined) {
-      throw new Error('Expected refund fixture.');
-    }
-    const byId = new Map(
-      ledgerMonth.transactions.map((transaction) => [
-        transaction.raw.id,
-        transaction,
-      ]),
-    );
-
-    expect(
-      matchesFilter(refund, { month: '2026-09', superCategory: 'FUN' }, byId),
-    ).toBe(true);
   });
 
   it('resolves a cross-month refund using repository context', async () => {
@@ -188,8 +195,12 @@ describe('Home and Explorer view models', () => {
     const context = snapshot.ledgerMonth?.resolutionTransactions ?? [];
 
     const explorer = createExplorerViewModel(
+      context.filter(({ raw }) => raw.createdAt.slice(0, 7) === '2026-09'),
       context,
-      { month: '2026-09', superCategory: 'FUN' },
+      {
+        ...monthQuery('2026-09'),
+        superCategories: ['FUN'],
+      },
       'GBP',
     );
 
@@ -213,8 +224,11 @@ describe('Home and Explorer view models', () => {
     );
 
     const explorer = createExplorerViewModel(
-      transactions,
-      { month: '2026-09', date: '2026-09-03' },
+      transactions.filter(
+        ({ raw }) => raw.createdAt.slice(0, 10) === '2026-09-03',
+      ),
+      ledgerMonth.resolutionTransactions,
+      dayQuery('2026-09-03'),
       'GBP',
     );
 

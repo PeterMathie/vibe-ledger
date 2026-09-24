@@ -48,16 +48,18 @@ Saving uses contribution progress and `to go`, with net savings movement on a
 separate line. These values always drill to the exact Breakdown/Explorer
 filter.
 
-Pace/history comes after the plan and position. Until the Heat Map layer ships,
-recent exact-date activity can provide honest drill-down without imitating the
-future calendar visual.
+Pace/history comes after the plan and position. Home includes the full calendar
+heat map and exact-date drill-down. Living and Fun use proportional wrapping
+runover rows; extreme runover preserves its physical scroll length while
+virtualising rendered rows.
 
 ## Breakdown / Explorer hierarchy
 
-Breakdown should read as a category tree:
+Breakdown should read as a hierarchy:
 
 - selected period and included/excluded summary;
-- categories ordered by contribution;
+- Living, Saving, and Fun as the first level;
+- categories ordered by contribution within each super-category;
 - amount and proportion for each category;
 - merchant/transaction children indented beneath their category;
 - explicit type, inclusion, exclusion, split, and review status.
@@ -78,9 +80,11 @@ Layers may expose unavailable destinations as clearly disabled future
 affordances, but must not fake their content. Settings and experimental views
 are subordinate, not primary navigation.
 
-## Deferred showcase elements
+## Current and deferred showcase elements
 
-The allocation editor, proportional runover, calendar heat map, Trends chart,
-search/corrections, and subscription management belong to their roadmap layers.
-Later implementations should preserve this hierarchy rather than introducing a
-new generic dashboard language.
+The interactive allocation ring, exact numeric editor, proportional runover,
+calendar heat map, and hierarchical Breakdown are part of the first usable
+synthetic app. Trends charts, search/corrections, subscription management, and
+the experimental Money Map remain later layers. Their implementations must
+reuse the same typed filters and preserve this hierarchy rather than introduce
+a new generic dashboard language.

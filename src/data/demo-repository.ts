@@ -1,7 +1,11 @@
 import {
   calculateMonthlyBudget,
+  createMonthlyBudget,
+  type AllocationRatios,
   type MonthlyBudgetSummary,
 } from '../domain/budget';
+import { DomainValidationError } from '../domain/errors';
+import type { LedgerQuery } from '../domain/query';
 import type {
   Category,
   Classification,
@@ -17,7 +21,7 @@ import {
   DEMO_FIXTURE_VERSION,
   DEMO_TRANSACTIONS,
 } from '../demo/fixtures';
-import type { Database } from './database';
+import type { Database, DatabaseValue } from './database';
 
 export interface DemoImportResult {
   readonly insertedTransactions: number;
@@ -37,6 +41,11 @@ export interface LedgerSnapshot {
   readonly months: readonly string[];
   readonly activeMonth: string | null;
   readonly ledgerMonth: LedgerMonth | null;
+}
+
+export interface LedgerQueryResult {
+  readonly matches: readonly ClassifiedTransaction[];
+  readonly resolutionTransactions: readonly ClassifiedTransaction[];
 }
 
 interface JoinedTransactionRow {
@@ -266,6 +275,76 @@ export async function resetDemoData(database: Database): Promise<void> {
   }
 }
 
+export async function updateMonthlyAllocation(
+  database: Database,
+  monthKey: string,
+  currency: string,
+  budgetBaseMinor: number,
+  ratios: AllocationRatios,
+  updatedAt: string,
+): Promise<MonthlyBudget> {
+  const budget = createMonthlyBudget(
+    monthKey,
+    currency,
+    budgetBaseMinor,
+    ratios,
+    updatedAt,
+  );
+  const result = await database.runAsync(
+    `UPDATE monthly_budgets
+       SET living_ratio_bp = ?, saving_ratio_bp = ?, fun_ratio_bp = ?,
+         living_target_minor = ?, saving_target_minor = ?, fun_target_minor = ?,
+         updated_at = ?
+       WHERE month_key = ? AND closed_at IS NULL;`,
+    budget.livingRatioBp,
+    budget.savingRatioBp,
+    budget.funRatioBp,
+    budget.livingTargetMinor,
+    budget.savingTargetMinor,
+    budget.funTargetMinor,
+    updatedAt,
+    monthKey,
+  );
+  if (result.changes !== 1) {
+    throw new DomainValidationError(
+      'Only the open current month allocation can be changed.',
+    );
+  }
+  return budget;
+}
+
+export async function queryLedgerTransactions(
+  database: Database,
+  query: LedgerQuery,
+  currency: string,
+): Promise<LedgerQueryResult> {
+  if (
+    query.subscriptionStatuses !== undefined &&
+    query.subscriptionStatuses.length > 0
+  ) {
+    throw new DomainValidationError(
+      'Subscription filters are unavailable until subscription metadata ships.',
+    );
+  }
+
+  const { clauses, params } = buildQueryWhere(query, currency);
+  const rows = await database.getAllAsync<{ id: string }>(
+    `SELECT r.id
+       FROM raw_transactions r
+       JOIN transaction_classifications c
+         ON c.raw_transaction_id = r.id AND c.active = 1
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY r.created_at DESC, r.id;`,
+    ...params,
+  );
+  const matchIds = rows.map(({ id }) => id);
+  const [matches, resolutionTransactions] = await Promise.all([
+    loadClassifiedTransactions(database, matchIds),
+    loadClassifiedTransactionsByCurrency(database, currency),
+  ]);
+  return { matches, resolutionTransactions };
+}
+
 export async function loadLedgerSnapshot(
   database: Database,
   requestedMonth?: string,
@@ -285,7 +364,7 @@ export async function loadLedgerSnapshot(
 
   if (activeMonth === null) {
     return {
-      isDemoLoaded: state !== null,
+      isDemoLoaded: state?.fixture_version === DEMO_FIXTURE_VERSION,
       months,
       activeMonth: null,
       ledgerMonth: null,
@@ -293,7 +372,7 @@ export async function loadLedgerSnapshot(
   }
 
   return {
-    isDemoLoaded: state !== null,
+    isDemoLoaded: state?.fixture_version === DEMO_FIXTURE_VERSION,
     months,
     activeMonth,
     ledgerMonth: await loadLedgerMonth(database, activeMonth),
@@ -347,7 +426,15 @@ export async function loadLedgerMonth(
 
 async function loadClassifiedTransactions(
   database: Database,
+  rawIds?: readonly string[],
 ): Promise<readonly ClassifiedTransaction[]> {
+  if (rawIds !== undefined && rawIds.length === 0) {
+    return [];
+  }
+  const idClause =
+    rawIds === undefined
+      ? ''
+      : `WHERE r.id IN (${rawIds.map(() => '?').join(', ')})`;
   const [rows, splitRows, categoryRows] = await Promise.all([
     database.getAllAsync<JoinedTransactionRow>(
       `SELECT
@@ -367,7 +454,9 @@ async function loadClassifiedTransactions(
          ON c.raw_transaction_id = r.id AND c.active = 1
        LEFT JOIN categories category ON category.id = c.category_id
        LEFT JOIN super_categories super ON super.id = category.super_category_id
+       ${idClause}
        ORDER BY r.created_at DESC, r.id;`,
+      ...(rawIds ?? []),
     ),
     database.getAllAsync<SplitRow>(
       'SELECT * FROM transaction_splits ORDER BY raw_transaction_id, rowid;',
@@ -402,6 +491,187 @@ async function loadClassifiedTransactions(
       }),
     };
   });
+}
+
+async function loadClassifiedTransactionsByCurrency(
+  database: Database,
+  currency: string,
+): Promise<readonly ClassifiedTransaction[]> {
+  const ids = await database.getAllAsync<{ id: string }>(
+    'SELECT id FROM raw_transactions WHERE currency = ?;',
+    currency,
+  );
+  return loadClassifiedTransactions(
+    database,
+    ids.map(({ id }) => id),
+  );
+}
+
+function buildQueryWhere(
+  query: LedgerQuery,
+  currency: string,
+): { readonly clauses: string[]; readonly params: DatabaseValue[] } {
+  const clauses = ['r.currency = ?', 'r.source_deleted = 0'];
+  const params: DatabaseValue[] = [currency];
+
+  if (query.date.kind === 'DAY') {
+    assertDate(query.date.date);
+    clauses.push('substr(r.created_at, 1, 10) = ?');
+    params.push(query.date.date);
+  } else if (query.date.kind === 'MONTH') {
+    assertMonth(query.date.month);
+    clauses.push('substr(r.created_at, 1, 7) = ?');
+    params.push(query.date.month);
+  } else {
+    assertDate(query.date.startDate);
+    assertDate(query.date.endDate);
+    if (query.date.startDate > query.date.endDate) {
+      throw new DomainValidationError(
+        'Query start date must not follow end date.',
+      );
+    }
+    clauses.push('substr(r.created_at, 1, 10) BETWEEN ? AND ?');
+    params.push(query.date.startDate, query.date.endDate);
+  }
+
+  if (query.merchant !== undefined) {
+    clauses.push(
+      `lower(COALESCE(r.merchant_name, r.description)) LIKE ? ESCAPE '\\'`,
+    );
+    params.push(`%${escapeLike(query.merchant.toLowerCase())}%`);
+  }
+  addClassificationOrSplitClause(
+    clauses,
+    params,
+    'event_type',
+    query.eventTypes,
+  );
+  addClassificationOrSplitClause(clauses, params, 'budget_scope', query.scopes);
+
+  if (query.categoryIds !== undefined && query.categoryIds.length > 0) {
+    const placeholders = query.categoryIds.map(() => '?').join(', ');
+    clauses.push(
+      `(c.category_id IN (${placeholders}) OR EXISTS (
+        SELECT 1 FROM transaction_splits split
+        WHERE split.raw_transaction_id = r.id
+          AND split.category_id IN (${placeholders})
+      ) OR EXISTS (
+        SELECT 1
+        FROM transaction_classifications offset_classification
+        WHERE offset_classification.raw_transaction_id =
+          c.offset_raw_transaction_id
+          AND offset_classification.active = 1
+          AND (
+            offset_classification.category_id IN (${placeholders})
+            OR EXISTS (
+              SELECT 1 FROM transaction_splits offset_split
+              WHERE offset_split.raw_transaction_id =
+                offset_classification.raw_transaction_id
+                AND offset_split.category_id IN (${placeholders})
+            )
+          )
+      ))`,
+    );
+    params.push(
+      ...query.categoryIds,
+      ...query.categoryIds,
+      ...query.categoryIds,
+      ...query.categoryIds,
+    );
+  }
+  if (query.superCategories !== undefined && query.superCategories.length > 0) {
+    const placeholders = query.superCategories.map(() => '?').join(', ');
+    clauses.push(
+      `EXISTS (
+        SELECT 1
+        FROM categories category
+        JOIN super_categories super
+          ON super.id = category.super_category_id
+        WHERE super.key IN (${placeholders})
+          AND (
+            category.id = c.category_id OR category.id IN (
+              SELECT split.category_id FROM transaction_splits split
+              WHERE split.raw_transaction_id = r.id
+            ) OR category.id IN (
+              SELECT offset_classification.category_id
+              FROM transaction_classifications offset_classification
+              WHERE offset_classification.raw_transaction_id =
+                c.offset_raw_transaction_id
+                AND offset_classification.active = 1
+            ) OR category.id IN (
+              SELECT offset_split.category_id
+              FROM transaction_classifications offset_classification
+              JOIN transaction_splits offset_split
+                ON offset_split.raw_transaction_id =
+                  offset_classification.raw_transaction_id
+              WHERE offset_classification.raw_transaction_id =
+                c.offset_raw_transaction_id
+                AND offset_classification.active = 1
+            )
+          )
+      )`,
+    );
+    params.push(...query.superCategories);
+  }
+  if (query.amount !== undefined) {
+    if (
+      !Number.isSafeInteger(query.amount.thresholdMinor) ||
+      query.amount.thresholdMinor < 0
+    ) {
+      throw new DomainValidationError(
+        'Query amount threshold must be a non-negative integer.',
+      );
+    }
+    const operators = {
+      EQUAL: '=',
+      GREATER_THAN: '>',
+      GREATER_THAN_OR_EQUAL: '>=',
+      LESS_THAN: '<',
+      LESS_THAN_OR_EQUAL: '<=',
+    } as const;
+    clauses.push(`abs(r.amount_minor) ${operators[query.amount.comparator]} ?`);
+    params.push(query.amount.thresholdMinor);
+  }
+  return { clauses, params };
+}
+
+function addClassificationOrSplitClause(
+  clauses: string[],
+  params: DatabaseValue[],
+  column: 'event_type' | 'budget_scope',
+  values: readonly string[] | undefined,
+): void {
+  if (values === undefined || values.length === 0) {
+    return;
+  }
+  const placeholders = values.map(() => '?').join(', ');
+  clauses.push(
+    `(c.${column} IN (${placeholders}) OR EXISTS (
+      SELECT 1 FROM transaction_splits split
+      WHERE split.raw_transaction_id = r.id
+        AND split.${column} IN (${placeholders})
+    ))`,
+  );
+  params.push(...values, ...values);
+}
+
+function escapeLike(value: string): string {
+  return value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('%', '\\%')
+    .replaceAll('_', '\\_');
+}
+
+function assertDate(value: string): void {
+  if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)) {
+    throw new DomainValidationError('Query date must use YYYY-MM-DD.');
+  }
+}
+
+function assertMonth(value: string): void {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+    throw new DomainValidationError('Query month must use YYYY-MM.');
+  }
 }
 
 async function ownRecord(

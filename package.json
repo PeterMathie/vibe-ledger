@@ -14,8 +14,8 @@
     "doctor": "expo-doctor",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "format": "prettier --write App.tsx index.ts src tests *.json *.mjs *.mts docs/FOUNDATION.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/VISUAL_DIRECTION.md docs/adr",
-    "format:check": "prettier --check App.tsx index.ts src tests *.json *.mjs *.mts docs/FOUNDATION.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/VISUAL_DIRECTION.md docs/adr",
+    "format": "prettier --write App.tsx index.ts src tests *.json *.mjs *.mts README.md docs/FOUNDATION.md docs/PRODUCT_SPEC.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/UX_SPEC.md docs/VISUAL_DIRECTION.md docs/adr",
+    "format:check": "prettier --check App.tsx index.ts src tests *.json *.mjs *.mts README.md docs/FOUNDATION.md docs/PRODUCT_SPEC.md docs/SECURITY_AND_PRIVACY.md docs/THIRD_PARTY.md docs/UX_SPEC.md docs/VISUAL_DIRECTION.md docs/adr",
     "check": "npm run test && npm run typecheck && npm run lint && npm run format:check && npm run doctor"
   },
   "dependencies": {
@@ -24,7 +24,8 @@
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

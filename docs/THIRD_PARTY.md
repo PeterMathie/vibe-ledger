@@ -13,15 +13,17 @@ ranges stay compatible with the selected Expo SDK.
 | `react`                          | Component runtime                              | Presentation/composition only   |
 | `react-native`                   | Android/iOS UI runtime                         | Presentation/composition only   |
 | `react-native-safe-area-context` | System inset-aware screen layout               | Presentation only               |
+| `react-native-svg`               | Local interactive allocation-ring rendering    | Presentation only               |
 
 No analytics, crash-reporting, networking, authentication, advertising, or
 generative-AI SDK is installed.
 
 The interactive Demo Data, Home, and Explorer layer uses
 `react-native-safe-area-context`, Expo's compatible system-inset primitive,
-because React Native 0.86 deprecates its built-in `SafeAreaView`. Navigation,
-system-theme support, and accessible controls otherwise use the existing React
-Native runtime.
+because React Native 0.86 deprecates its built-in `SafeAreaView`.
+`react-native-svg` renders the local three-segment allocation ring; it performs
+no I/O and receives only derived ratios. Navigation, system-theme support, and
+accessible controls otherwise use the existing React Native runtime.
 
 ## Development dependencies
 

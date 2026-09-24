@@ -134,6 +134,7 @@ Net savings movement:   −£4,100
 ```
 
 This distinction preserves two useful facts:
+
 1. the user allocated 30% of current income to saving;
 2. the user's total savings nevertheless fell because old savings were withdrawn.
 
@@ -169,9 +170,9 @@ Contains:
 
 - date selection;
 - summary metrics for the active filter;
-- super-category split;
-- category breakdown;
-- transaction list;
+- Living / Saving / Fun as the first breakdown level;
+- subcategories within the selected super-category;
+- merchant/transaction children within each subcategory;
 - search;
 - structured filter chips;
 - transaction editing;
@@ -180,6 +181,12 @@ Contains:
 - rule creation.
 
 All other views deep-link into Explorer with filters.
+
+Every deep link and structured control uses one canonical typed query model:
+day/month/date range, merchant, category, super-category, amount
+comparator/threshold, event type, budget scope, and subscription status. Values
+are passed to parameterised repository methods; the UI never creates raw SQL.
+The same query model is shared with Trends and Subscriptions.
 
 Examples:
 
@@ -213,6 +220,13 @@ For one selected category:
 - show the category total per month.
 
 Selecting a bar/segment opens Explorer with the matching filters.
+
+An all-allocation view may show each month's Living and Fun
+**included spending** alongside Saving **contributions**, but these remain
+separate, explicitly labelled series. They must not be merged into an
+ambiguous spending total. Net savings movement is a separate measure again.
+Every series point carries its month, amount, target where relevant, semantic
+measure, grouping identity, and canonical Explorer drill-down query.
 
 ### 5.4 Subscriptions
 
@@ -256,7 +270,9 @@ Contains:
 
 ### 5.6 Experimental: Money Map
 
-A Sankey-style view of budget base → super-categories → categories.
+A Sankey-style view of budget base → super-categories → subcategories, using
+the same stored monthly targets and canonical drill-down queries as Home and
+Explorer.
 
 It is not primary navigation in the initial beta. It should be promoted only if actual usage shows it answers a useful question better than Home/Trends.
 
@@ -325,7 +341,7 @@ Colour mapping:
 - exactly daily allowance = darkest green;
 - > daily allowance = red;
 - red intensity increases continuously between the daily allowance and the full monthly spendable budget;
-- >= full monthly spendable budget in one day = darkest red.
+- > = full monthly spendable budget in one day = darkest red.
 
 Tap/click a day:
 
@@ -389,6 +405,7 @@ Recurring-payment detection may use deterministic heuristics:
 Detection suggests; it does not silently assert.
 
 A subscription can be:
+
 - monthly;
 - every N months;
 - yearly;

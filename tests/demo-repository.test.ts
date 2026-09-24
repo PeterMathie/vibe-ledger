@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   importDemoData,
   loadLedgerSnapshot,
+  queryLedgerTransactions,
   resetDemoData,
+  updateMonthlyAllocation,
 } from '../src/data/demo-repository';
 import { migrateDatabase } from '../src/data/migrations';
 import { DEMO_BUDGETS, DEMO_TRANSACTIONS } from '../src/demo/fixtures';
+import { monthQuery } from '../src/domain/query';
 import { NodeDatabase } from './support/node-database';
 
 describe('synthetic Demo Data repository', () => {
@@ -44,6 +47,23 @@ describe('synthetic Demo Data repository', () => {
     ).toEqual({ count: DEMO_TRANSACTIONS.length });
   });
 
+  it('offers bootstrap again when an installed fixture catalog is stale', async () => {
+    await importDemoData(database);
+    await database.runAsync(
+      'UPDATE demo_dataset_state SET fixture_version = ?;',
+      1,
+    );
+
+    expect((await loadLedgerSnapshot(database)).isDemoLoaded).toBe(false);
+    const refreshed = await importDemoData(database);
+    expect(refreshed).toMatchObject({
+      insertedTransactions: 0,
+      insertedBudgets: 0,
+      unchangedTransactions: DEMO_TRANSACTIONS.length,
+    });
+    expect((await loadLedgerSnapshot(database)).isDemoLoaded).toBe(true);
+  });
+
   it('loads stored historical targets and engine-derived current actuals', async () => {
     await importDemoData(database);
 
@@ -56,7 +76,7 @@ describe('synthetic Demo Data repository', () => {
       savingTargetMinor: 90_000,
       funTargetMinor: 60_000,
       livingActualMinor: 104_500,
-      funActualMinor: 6_320,
+      funActualMinor: 136_320,
       savingContributedMinor: 90_000,
       savingWithdrawnMinor: 500_000,
       netSavingsMovementMinor: -410_000,
@@ -149,5 +169,138 @@ describe('synthetic Demo Data repository', () => {
     expect(resolutionIds).not.toContain('test:usd');
     expect(resolutionIds).toContain('demo:aug-cinema');
     expect(currentIds).not.toContain('demo:aug-cinema');
+  });
+
+  it('persists allocation only for the open month and preserves history', async () => {
+    await importDemoData(database);
+
+    const updated = await updateMonthlyAllocation(
+      database,
+      '2026-09',
+      'GBP',
+      300_000,
+      { LIVING: 4_000, SAVING: 3_500, FUN: 2_500 },
+      '2026-09-25T12:00:00.000Z',
+    );
+    expect(updated).toMatchObject({
+      livingTargetMinor: 120_000,
+      savingTargetMinor: 105_000,
+      funTargetMinor: 75_000,
+    });
+    expect(
+      (await loadLedgerSnapshot(database, '2026-09')).ledgerMonth?.budget,
+    ).toMatchObject({
+      livingRatioBp: 4_000,
+      savingRatioBp: 3_500,
+      funRatioBp: 2_500,
+    });
+
+    await expect(
+      updateMonthlyAllocation(
+        database,
+        '2026-08',
+        'GBP',
+        280_000,
+        { LIVING: 4_000, SAVING: 3_500, FUN: 2_500 },
+        '2026-09-25T12:00:00.000Z',
+      ),
+    ).rejects.toThrow('Only the open current month');
+    expect(
+      (await loadLedgerSnapshot(database, '2026-08')).ledgerMonth?.budget,
+    ).toMatchObject({
+      livingRatioBp: 5_500,
+      savingRatioBp: 2_500,
+      funRatioBp: 2_000,
+    });
+  });
+
+  it('queries typed dates, amounts, types, scopes, and linked categories', async () => {
+    await importDemoData(database);
+
+    const day = await queryLedgerTransactions(
+      database,
+      { date: { kind: 'DAY', date: '2026-09-03' } },
+      'GBP',
+    );
+    expect(day.matches.map(({ raw }) => raw.id)).toEqual(['demo:tesco-split']);
+
+    const range = await queryLedgerTransactions(
+      database,
+      {
+        date: {
+          kind: 'RANGE',
+          startDate: '2026-09-20',
+          endDate: '2026-09-22',
+        },
+        eventTypes: ['REFUND', 'REIMBURSEMENT'],
+        scopes: ['INCLUDED'],
+        amount: {
+          comparator: 'GREATER_THAN_OR_EQUAL',
+          thresholdMinor: 4_000,
+        },
+      },
+      'GBP',
+    );
+    expect(range.matches.map(({ raw }) => raw.id).sort()).toEqual([
+      'demo:clothing-refund',
+      'demo:dinner-reimbursement',
+    ]);
+
+    const linkedFun = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', { superCategories: ['FUN'] }),
+      'GBP',
+    );
+    expect(linkedFun.matches.map(({ raw }) => raw.id)).toEqual(
+      expect.arrayContaining([
+        'demo:clothing-refund',
+        'demo:dinner-reimbursement',
+        'demo:tesco-split',
+      ]),
+    );
+  });
+
+  it('parameterizes merchant text and escapes LIKE wildcards', async () => {
+    await importDemoData(database);
+    const injection = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', { merchant: "' OR 1=1 --" }),
+      'GBP',
+    );
+    expect(injection.matches).toEqual([]);
+    expect(
+      await database.getFirstAsync<{ count: number }>(
+        'SELECT count(*) AS count FROM raw_transactions;',
+      ),
+    ).toEqual({ count: DEMO_TRANSACTIONS.length });
+
+    const literalWildcard = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', { merchant: '%_' }),
+      'GBP',
+    );
+    expect(literalWildcard.matches).toEqual([]);
+  });
+
+  it('rejects unsupported subscription filters and invalid query values', async () => {
+    await importDemoData(database);
+    await expect(
+      queryLedgerTransactions(
+        database,
+        monthQuery('2026-09', {
+          subscriptionStatuses: ['CONFIRMED'],
+        }),
+        'GBP',
+      ),
+    ).rejects.toThrow('Subscription filters are unavailable');
+    await expect(
+      queryLedgerTransactions(
+        database,
+        monthQuery('2026-09', {
+          amount: { comparator: 'EQUAL', thresholdMinor: 1.5 },
+        }),
+        'GBP',
+      ),
+    ).rejects.toThrow('non-negative integer');
   });
 });
