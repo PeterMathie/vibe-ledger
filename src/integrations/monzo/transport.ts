@@ -36,7 +36,7 @@ export async function withMonzoRetry<T>(
     attempt <= MONZO_NETWORK_POLICY.maximumAttempts;
     attempt += 1
   ) {
-    options.signal?.throwIfAborted();
+    throwIfAborted(options.signal);
     const timeout = new AbortController();
     const abort = () => timeout.abort(options.signal?.reason);
     options.signal?.addEventListener('abort', abort, { once: true });
@@ -83,4 +83,12 @@ function abortableSleep(
       { once: true },
     );
   });
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('Request cancelled.', 'AbortError');
+  }
 }

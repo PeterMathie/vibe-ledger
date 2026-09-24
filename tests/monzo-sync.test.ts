@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getMonzoConnectionSummary } from '../src/app/settings';
 import { migrateDatabase } from '../src/data/migrations';
 import { MemorySecureTokenStore } from '../src/integrations/monzo/memory-secure-store';
+import { MockMonzoApi } from '../src/integrations/monzo/mock';
 import {
   syncMonzo,
   toSyncFailure,
@@ -48,6 +49,7 @@ describe('Monzo local sync', () => {
       accounts: 1,
       pots: 1,
       transactions: 2,
+      pages: 1,
       mode: 'INITIAL',
       history: 'FULL',
     });
@@ -59,6 +61,56 @@ describe('Monzo local sync', () => {
       mockLastSyncedAt: NOW,
       mockHistory: 'FULL',
     });
+  });
+
+  it('reports pagination and progress before committing', async () => {
+    const api = apiWithTransactions([
+      transaction('tx_page', -100, '2026-09-20T00:00:00.000Z'),
+    ]);
+    api.nextCursor = 'next';
+    const phases: string[] = [];
+
+    const result = await syncMonzo(database, api, {
+      source: 'monzo_mock',
+      authenticatedAt: NOW,
+      now: NOW,
+      onProgress: ({ phase, pages }) => phases.push(`${phase}:${pages}`),
+    });
+
+    expect(result.pages).toBe(2);
+    expect(phases).toEqual([
+      'FETCHING_ACCOUNTS:0',
+      'FETCHING_POTS:0',
+      'FETCHING_TRANSACTIONS:1',
+      'FETCHING_TRANSACTIONS:2',
+      'COMMITTING:2',
+    ]);
+  });
+
+  it('runs the two-page development mock idempotently', async () => {
+    const first = await syncMonzo(database, new MockMonzoApi(), {
+      source: 'monzo_mock',
+      authenticatedAt: NOW,
+      now: NOW,
+    });
+    const second = await syncMonzo(database, new MockMonzoApi(), {
+      source: 'monzo_mock',
+      authenticatedAt: NOW,
+      now: '2026-09-24T20:00:00.000Z',
+    });
+
+    expect(first).toMatchObject({ mode: 'INITIAL', pages: 2, transactions: 2 });
+    expect(second).toMatchObject({
+      mode: 'INCREMENTAL',
+      pages: 2,
+      transactions: 1,
+    });
+    expect(
+      await database.getFirstAsync<{ count: number }>(
+        `SELECT count(*) AS count FROM raw_transactions
+         WHERE source = 'monzo_mock';`,
+      ),
+    ).toEqual({ count: 2 });
   });
 
   it('models the post-five-minute initial import as partial 90-day history', async () => {
@@ -215,6 +267,26 @@ describe('Monzo local sync', () => {
         now: NOW,
       }),
     ).rejects.toThrow('SYNTHETIC_PAGE_FAILURE');
+    expect(
+      await database.getFirstAsync<{ count: number }>(
+        `SELECT count(*) AS count FROM raw_transactions
+         WHERE source = 'monzo_mock';`,
+      ),
+    ).toEqual({ count: 0 });
+  });
+
+  it('cancels before persistence and reports an explicit cancelled state', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled', 'AbortError'));
+
+    await expect(
+      syncMonzo(database, apiWithTransactions([transaction('tx', -100, NOW)]), {
+        source: 'monzo_mock',
+        authenticatedAt: NOW,
+        now: NOW,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
     expect(
       await database.getFirstAsync<{ count: number }>(
         `SELECT count(*) AS count FROM raw_transactions

@@ -134,7 +134,12 @@ import type {
 } from './src/domain/types';
 import { MockMonzoApi } from './src/integrations/monzo/mock';
 import { ExpoSecureTokenStore } from './src/integrations/monzo/secure-store';
-import { syncMonzo, wipeMonzoConnection } from './src/integrations/monzo/sync';
+import {
+  syncMonzo,
+  toSyncFailure,
+  wipeMonzoConnection,
+  type SyncProgress,
+} from './src/integrations/monzo/sync';
 
 type LoadState =
   | { readonly status: 'LOADING' }
@@ -2599,6 +2604,8 @@ function SettingsScreen({
   const [restoreText, setRestoreText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mockProgress, setMockProgress] = useState<SyncProgress | null>(null);
+  const mockAbort = useRef<AbortController | null>(null);
 
   const refreshReadiness = useCallback(async () => {
     setState({ status: 'LOADING' });
@@ -2625,37 +2632,56 @@ function SettingsScreen({
     );
   }, [database]);
 
-  const runMockSync = useCallback(async () => {
-    const now = new Date().toISOString();
-    setBusyAction('MOCK_SYNC');
-    setError(null);
-    setMessage(null);
-    let result;
-    try {
-      result = await syncMonzo(database, new MockMonzoApi(), {
-        source: 'monzo_mock',
-        authenticatedAt: now,
-        now,
-      });
-    } catch {
-      setError('Mock sync failed. No partial sync was saved.');
-      setBusyAction(null);
-      return;
-    }
-    try {
-      setMonzoSummary(await getMonzoConnectionSummary(database));
-      await onDataChanged();
-      setMessage(
-        `Synthetic Monzo-shaped data synced locally (${result.mode.toLowerCase()}).`,
-      );
-    } catch {
-      setError(
-        'Mock sync completed, but the refreshed view is unavailable. Restart the app to continue.',
-      );
-    } finally {
-      setBusyAction(null);
-    }
-  }, [database, onDataChanged]);
+  const runMockSync = useCallback(
+    async (offline = false) => {
+      const now = new Date().toISOString();
+      const controller = new AbortController();
+      mockAbort.current = controller;
+      setBusyAction('MOCK_SYNC');
+      setMockProgress(null);
+      setError(null);
+      setMessage(null);
+      let result;
+      try {
+        result = await syncMonzo(database, new MockMonzoApi(offline, 1_200), {
+          source: 'monzo_mock',
+          authenticatedAt: now,
+          now,
+          signal: controller.signal,
+          onProgress: setMockProgress,
+        });
+      } catch (syncError) {
+        const failure = toSyncFailure(syncError);
+        setError(
+          failure.phase === 'OFFLINE'
+            ? 'Mock sync is offline. No partial sync was saved. Retry when ready.'
+            : failure.phase === 'CANCELLED'
+              ? 'Mock sync cancelled. No partial sync was saved.'
+              : 'Mock sync failed. No partial sync was saved.',
+        );
+        setBusyAction(null);
+        setMockProgress(null);
+        mockAbort.current = null;
+        return;
+      }
+      try {
+        setMonzoSummary(await getMonzoConnectionSummary(database));
+        await onDataChanged();
+        setMessage(
+          `Synthetic Monzo-shaped data synced locally (${result.mode.toLowerCase()} · ${result.pages} pages).`,
+        );
+      } catch {
+        setError(
+          'Mock sync completed, but the refreshed view is unavailable. Restart the app to continue.',
+        );
+      } finally {
+        setBusyAction(null);
+        setMockProgress(null);
+        mockAbort.current = null;
+      }
+    },
+    [database, onDataChanged],
+  );
 
   const shareExport = useCallback(async () => {
     setBusyAction('EXPORT');
@@ -2825,7 +2851,7 @@ function SettingsScreen({
               disabled: busy,
             }}
             disabled={busy}
-            onPress={() => void runMockSync()}
+            onPress={() => void runMockSync(false)}
             style={styles.secondaryButton}
             testID="settings-monzo-mock-sync"
           >
@@ -2835,6 +2861,43 @@ function SettingsScreen({
                 : 'Run mock sync'}
             </Text>
           </Pressable>
+        ) : null}
+        {DEMO_MODE_ENABLED && busyAction !== 'MOCK_SYNC' ? (
+          <Pressable
+            accessibilityLabel="Simulate offline Monzo mock sync"
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => void runMockSync(true)}
+            style={styles.secondaryButton}
+            testID="settings-monzo-mock-offline"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              Simulate offline
+            </Text>
+          </Pressable>
+        ) : null}
+        {busyAction === 'MOCK_SYNC' ? (
+          <View style={styles.settingsSection}>
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.smallText, { color: palette.muted }]}
+            >
+              {mockProgress === null
+                ? 'Starting mock sync…'
+                : `${mockProgress.phase.toLowerCase().replaceAll('_', ' ')} · ${mockProgress.pages} pages`}
+            </Text>
+            <Pressable
+              accessibilityLabel="Cancel mock sync"
+              accessibilityRole="button"
+              onPress={() => mockAbort.current?.abort()}
+              style={styles.secondaryButton}
+              testID="settings-monzo-mock-cancel"
+            >
+              <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+                Cancel mock sync
+              </Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
 

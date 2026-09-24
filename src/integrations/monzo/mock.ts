@@ -36,10 +36,13 @@ const TRANSACTIONS: readonly MonzoTransactionDto[] = [
 export class MockMonzoApi implements MonzoApi {
   requestCount = 0;
 
-  constructor(readonly offline = false) {}
+  constructor(
+    readonly offline = false,
+    readonly delayMs = 0,
+  ) {}
 
-  async listAccounts(): Promise<MonzoAccountPage> {
-    this.beforeRequest();
+  async listAccounts(signal?: AbortSignal): Promise<MonzoAccountPage> {
+    await this.beforeRequest(signal);
     return {
       accounts: [
         {
@@ -52,8 +55,11 @@ export class MockMonzoApi implements MonzoApi {
     };
   }
 
-  async listPots(): Promise<MonzoPotPage> {
-    this.beforeRequest();
+  async listPots(
+    _accountId: string,
+    signal?: AbortSignal,
+  ): Promise<MonzoPotPage> {
+    await this.beforeRequest(signal);
     return {
       pots: [
         {
@@ -72,18 +78,33 @@ export class MockMonzoApi implements MonzoApi {
   async listTransactions(
     _accountId: string,
     request: { readonly since: string | null; readonly cursor: string | null },
+    signal?: AbortSignal,
   ): Promise<MonzoTransactionPage> {
-    this.beforeRequest();
+    await this.beforeRequest(signal);
+    const page = request.cursor === null ? 0 : 1;
     return {
       transactions: TRANSACTIONS.filter(
         ({ created }) => request.since === null || created >= request.since,
-      ),
-      nextCursor: null,
+      ).slice(page, page + 1),
+      nextCursor: page === 0 ? 'mock-page-2' : null,
     };
   }
 
-  private beforeRequest(): void {
+  private async beforeRequest(signal?: AbortSignal): Promise<void> {
     this.requestCount += 1;
     if (this.offline) throw new MonzoTransportError('OFFLINE');
+    if (this.delayMs > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, this.delayMs);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            reject(new DOMException('Mock sync cancelled.', 'AbortError'));
+          },
+          { once: true },
+        );
+      });
+    }
   }
 }

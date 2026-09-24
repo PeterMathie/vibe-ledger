@@ -54,8 +54,20 @@ export interface SyncResult {
   readonly accounts: number;
   readonly pots: number;
   readonly transactions: number;
+  readonly pages: number;
   readonly mode: 'INITIAL' | 'INCREMENTAL';
   readonly history: 'FULL' | 'LAST_90_DAYS';
+}
+
+export interface SyncProgress {
+  readonly phase:
+    | 'FETCHING_ACCOUNTS'
+    | 'FETCHING_POTS'
+    | 'FETCHING_TRANSACTIONS'
+    | 'COMMITTING';
+  readonly completedAccounts: number;
+  readonly totalAccounts: number;
+  readonly pages: number;
 }
 
 export interface SyncOptions {
@@ -63,6 +75,7 @@ export interface SyncOptions {
   readonly authenticatedAt: string;
   readonly now: string;
   readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: SyncProgress) => void;
 }
 
 interface SyncStateRow {
@@ -83,8 +96,20 @@ export async function syncMonzo(
     'SYNC_INVALID_AUTH_TIME',
   );
   const source = options.source ?? 'monzo';
+  options.onProgress?.({
+    phase: 'FETCHING_ACCOUNTS',
+    completedAccounts: 0,
+    totalAccounts: 0,
+    pages: 0,
+  });
   const accountPage = await api.listAccounts(options.signal);
   const accounts = accountPage.accounts.map(mapMonzoAccount);
+  options.onProgress?.({
+    phase: 'FETCHING_POTS',
+    completedAccounts: 0,
+    totalAccounts: accounts.length,
+    pages: 0,
+  });
   const pots = (
     await Promise.all(
       accounts.map(async (account) =>
@@ -108,8 +133,9 @@ export async function syncMonzo(
     INITIAL_HISTORY_WINDOW_MS;
   const accountHistory = new Map<string, 'FULL' | 'LAST_90_DAYS'>();
   const transactions: RawTransaction[] = [];
+  let pages = 0;
 
-  for (const account of accounts) {
+  for (const [accountIndex, account] of accounts.entries()) {
     const state = byAccount.get(account.id);
     const accountInitial = state?.last_completed_at == null;
     const fullHistory = accountInitial
@@ -123,21 +149,35 @@ export async function syncMonzo(
       : incrementalSince(state.cursor_created_at, now);
     let cursor: string | null = null;
     do {
-      options.signal?.throwIfAborted();
+      throwIfAborted(options.signal);
       const page = await api.listTransactions(
         account.id,
         { since, cursor, limit: 100 },
         options.signal,
       );
+      pages += 1;
       transactions.push(
         ...page.transactions.map((transaction) =>
           mapMonzoTransaction(account.id, transaction, now, source),
         ),
       );
+      options.onProgress?.({
+        phase: 'FETCHING_TRANSACTIONS',
+        completedAccounts: accountIndex,
+        totalAccounts: accounts.length,
+        pages,
+      });
       cursor = page.nextCursor;
     } while (cursor !== null);
   }
 
+  throwIfAborted(options.signal);
+  options.onProgress?.({
+    phase: 'COMMITTING',
+    completedAccounts: accounts.length,
+    totalAccounts: accounts.length,
+    pages,
+  });
   await database.execAsync('BEGIN IMMEDIATE;');
   try {
     for (const account of accounts) {
@@ -224,6 +264,7 @@ export async function syncMonzo(
     accounts: accounts.length,
     pots: pots.length,
     transactions: transactions.length,
+    pages,
     mode: initial ? 'INITIAL' : 'INCREMENTAL',
     history: [...accountHistory.values()].every((value) => value === 'FULL')
       ? 'FULL'
@@ -359,4 +400,12 @@ function incrementalSince(cursor: string | null, now: string): string {
   if (cursor === null) return floor;
   const overlap = daysBefore(cursor, INCREMENTAL_CURSOR_OVERLAP_DAYS);
   return overlap < floor ? floor : overlap;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('Sync cancelled.', 'AbortError');
+  }
 }

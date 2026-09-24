@@ -6,6 +6,11 @@ import type {
 import type { MonzoApi } from '../src/integrations/monzo/sync';
 
 export class MockMonzoApi implements MonzoApi {
+  constructor(
+    readonly offline = false,
+    readonly delayMs = 0,
+  ) {}
+
   async listAccounts(): Promise<MonzoAccountPage> {
     throw new Error('MONZO_MOCK_DISABLED');
   }
