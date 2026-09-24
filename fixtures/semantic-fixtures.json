@@ -22,6 +22,7 @@
       "id": "coffee",
       "amount_minor": -420,
       "description": "BLACK SHEEP COFFEE",
+      "created_at": "2026-09-02T08:15:00.000Z",
       "expected_type": "SPEND",
       "category": "Coffee",
       "super_category": "FUN"
@@ -30,9 +31,29 @@
       "id": "rent",
       "amount_minor": -90000,
       "description": "RENT",
+      "created_at": "2026-09-01T09:00:00.000Z",
       "expected_type": "SPEND",
       "category": "Rent",
       "super_category": "LIVING"
+    },
+    {
+      "id": "tesco_split",
+      "amount_minor": -7000,
+      "description": "TESCO",
+      "created_at": "2026-09-03T17:30:00.000Z",
+      "expected_type": "SPEND",
+      "splits": [
+        {
+          "amount_minor_abs": 5500,
+          "category": "Groceries",
+          "super_category": "LIVING"
+        },
+        {
+          "amount_minor_abs": 1500,
+          "category": "Nights out",
+          "super_category": "FUN"
+        }
+      ]
     },
     {
       "id": "moneybox",
@@ -54,6 +75,7 @@
       "id": "savings_withdrawal",
       "amount_minor": 600000,
       "description": "TRANSFER FROM SAVINGS",
+      "created_at": "2026-09-05T12:00:00.000Z",
       "expected_type": "SAVING_WITHDRAWAL"
     },
     {
@@ -66,6 +88,7 @@
       "id": "holiday_hotel",
       "amount_minor": -70000,
       "description": "AMSTERDAM HOTEL",
+      "created_at": "2026-09-12T18:00:00.000Z",
       "expected_type": "SPEND",
       "category": "Holiday",
       "super_category": "FUN",
@@ -75,6 +98,7 @@
       "id": "holiday_coffee",
       "amount_minor": -400,
       "description": "AMSTERDAM COFFEE",
+      "created_at": "2026-09-13T08:00:00.000Z",
       "expected_type": "SPEND",
       "category": "Coffee",
       "super_category": "FUN",
@@ -87,6 +111,40 @@
       "expected_type": "SPEND",
       "category": "Subscriptions",
       "super_category": "LIVING"
+    },
+    {
+      "id": "clothing",
+      "amount_minor": -12000,
+      "description": "CLOTHING SHOP",
+      "created_at": "2026-09-18T12:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Shopping",
+      "super_category": "FUN"
+    },
+    {
+      "id": "clothing_refund",
+      "amount_minor": 12000,
+      "description": "CLOTHING SHOP REFUND",
+      "created_at": "2026-09-20T12:00:00.000Z",
+      "expected_type": "REFUND",
+      "offset_event_id": "clothing"
+    },
+    {
+      "id": "dinner",
+      "amount_minor": -8000,
+      "description": "RESTAURANT",
+      "created_at": "2026-09-21T19:00:00.000Z",
+      "expected_type": "SPEND",
+      "category": "Restaurants",
+      "super_category": "FUN"
+    },
+    {
+      "id": "dinner_reimbursement",
+      "amount_minor": 4000,
+      "description": "FRIEND DINNER",
+      "created_at": "2026-09-22T10:00:00.000Z",
+      "expected_type": "REIMBURSEMENT",
+      "offset_event_id": "dinner"
     }
   ]
 }

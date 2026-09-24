@@ -1,0 +1,4 @@
+node_modules
+coverage
+docs/product-overview.html
+package-lock.json
