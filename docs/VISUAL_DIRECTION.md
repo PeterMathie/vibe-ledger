@@ -83,8 +83,10 @@ are subordinate, not primary navigation.
 ## Current and deferred showcase elements
 
 The interactive allocation ring, exact numeric editor, proportional runover,
-calendar heat map, and hierarchical Breakdown are part of the first usable
-synthetic app. Trends charts, search/corrections, subscription management, and
-the experimental Money Map remain later layers. Their implementations must
-reuse the same typed filters and preserve this hierarchy rather than introduce
-a new generic dashboard language.
+calendar heat map, hierarchical Breakdown, deterministic search/corrections,
+and Trends charts are implemented in the synthetic app. Trends preserves
+explicit semantic measures, stored historical targets, grouped stacks, and
+canonical Breakdown drill-downs. Subscription management and the experimental
+Money Map remain later layers. Their implementations must reuse the same typed
+filters and preserve this hierarchy rather than introduce a new generic
+dashboard language.

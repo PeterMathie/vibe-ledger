@@ -47,12 +47,15 @@ Persistence ports (src/data/database.ts)
   current-month allocation persistence, and parameterised typed queries. Demo
   ownership rows ensure reset cannot delete unrelated data.
 - `src/domain/query.ts` is the canonical query contract shared by Home,
-  Breakdown, and future Trends/Subscriptions. No UI value is interpolated into
-  SQL.
-- `src/domain/analytics.ts` defines future Trends series without ambiguously
+  Breakdown, Trends, and future Subscriptions. No UI value is interpolated
+  into SQL.
+- `src/domain/analytics.ts` defines the semantic Trend measures.
+  `src/domain/trends.ts` aggregates monthly bars, category composition, stored
+  targets, transaction counts, and canonical drill-down payloads without
   merging Living/Fun spending, Saving contributions, and net savings movement.
-- `src/app/allocation.ts` and `src/app/heat-map.ts` hold exact, React-free
-  interaction math for the allocation ring, runover, and calendar.
+- `src/app/allocation.ts`, `src/app/heat-map.ts`, and `src/app/trends.ts` hold
+  exact, React-free interaction math for the allocation ring, runover,
+  calendar, period boundaries, and chart layout.
 - `src/app/view-models.ts` converts semantic-engine output into Home and
   Explorer labels and typed drill-down filters without importing React Native.
 - `src/app/startup.ts` is the composition boundary. It may depend on Expo and

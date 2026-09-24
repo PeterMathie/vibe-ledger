@@ -6,6 +6,12 @@ import {
 } from '../domain/budget';
 import { DomainValidationError } from '../domain/errors';
 import type { LedgerQuery } from '../domain/query';
+import {
+  createTrendModel,
+  trendDateRange,
+  type TrendModel,
+  type TrendRequest,
+} from '../domain/trends';
 import type {
   Category,
   Classification,
@@ -47,6 +53,8 @@ export interface LedgerQueryResult {
   readonly matches: readonly ClassifiedTransaction[];
   readonly resolutionTransactions: readonly ClassifiedTransaction[];
 }
+
+export type TrendQueryResult = TrendModel;
 
 interface JoinedTransactionRow {
   readonly raw_id: string;
@@ -351,6 +359,52 @@ export async function queryLedgerTransactions(
     loadClassifiedTransactionsByCurrency(database, currency),
   ]);
   return { matches, resolutionTransactions };
+}
+
+export async function queryLedgerTrends(
+  database: Database,
+  request: TrendRequest,
+  currency: string,
+): Promise<TrendQueryResult> {
+  const range = trendDateRange(request);
+  const [queryResult, budgetRows, currencyRows] = await Promise.all([
+    queryLedgerTransactions(
+      database,
+      {
+        date: {
+          kind: 'RANGE',
+          startDate: range.startDate,
+          endDate: range.endDate,
+        },
+      },
+      currency,
+    ),
+    database.getAllAsync<MonthlyBudgetRow>(
+      `SELECT * FROM monthly_budgets
+       WHERE month_key BETWEEN ? AND ? AND currency = ?
+       ORDER BY month_key;`,
+      request.startMonth,
+      request.endMonth,
+      currency,
+    ),
+    database.getAllAsync<{ currency: string }>(
+      `SELECT DISTINCT currency
+       FROM raw_transactions
+       WHERE source_deleted = 0
+         AND substr(created_at, 1, 10) BETWEEN ? AND ?
+       ORDER BY currency;`,
+      range.startDate,
+      range.endDate,
+    ),
+  ]);
+  return createTrendModel(
+    request,
+    currency,
+    budgetRows.map(mapBudget),
+    queryResult.matches,
+    queryResult.resolutionTransactions,
+    currencyRows.map(({ currency: rowCurrency }) => rowCurrency),
+  );
 }
 
 export async function loadLedgerSnapshot(

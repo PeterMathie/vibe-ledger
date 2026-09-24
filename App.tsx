@@ -29,16 +29,23 @@ import {
   createExplorerViewModel,
   createHomeViewModel,
 } from './src/app/view-models';
+import {
+  createTrendChartLayout,
+  periodRequest,
+  type TrendPeriod,
+} from './src/app/trends';
 import { initializeApplication } from './src/app/startup';
 import type { Database } from './src/data/database';
 import {
   importDemoData,
   loadLedgerSnapshot,
   queryLedgerTransactions,
+  queryLedgerTrends,
   resetDemoData,
   updateMonthlyAllocation,
   type LedgerQueryResult,
   type LedgerSnapshot,
+  type TrendQueryResult,
 } from './src/data/demo-repository';
 import {
   createMerchantRule,
@@ -59,6 +66,7 @@ import {
   SUPER_CATEGORY_KEYS,
   type BudgetScope,
   type EventType,
+  type SuperCategoryKey,
 } from './src/domain/enums';
 import {
   allocateByBasisPoints,
@@ -72,6 +80,13 @@ import {
   type AmountComparator,
   type LedgerQuery,
 } from './src/domain/query';
+import {
+  enumerateMonths,
+  type TrendBar,
+  type TrendModel,
+  type TrendRequest,
+  type TrendSelection,
+} from './src/domain/trends';
 import {
   parseLedgerSearch,
   type ParsedLedgerSearch,
@@ -90,10 +105,12 @@ type LoadState =
 
 type Screen =
   | { readonly name: 'HOME' }
+  | { readonly name: 'TRENDS' }
   | {
       readonly name: 'EXPLORER';
       readonly filter: ExplorerFilter;
       readonly unrecognizedTokens: readonly string[];
+      readonly returnTo: 'HOME' | 'TRENDS';
     };
 
 type QueryLoadState =
@@ -253,11 +270,17 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       unrecognizedTokens: readonly string[] = [],
+      returnTo: 'HOME' | 'TRENDS' = 'HOME',
     ) => {
       if (database === null) {
         return;
       }
-      setScreen({ name: 'EXPLORER', filter, unrecognizedTokens });
+      setScreen({
+        name: 'EXPLORER',
+        filter,
+        unrecognizedTokens,
+        returnTo,
+      });
       setQueryState({ status: 'LOADING' });
       try {
         setQueryState({
@@ -374,8 +397,20 @@ export default function App() {
           busy={busyAction !== null}
           onSelectMonth={selectMonth}
           onExplore={(filter) => openExplorer(filter, budget.currency)}
+          onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onUpdateAllocation={updateAllocation}
           onReset={resetDemo}
+        />
+      ) : screen.name === 'TRENDS' ? (
+        <TrendsScreen
+          activeMonth={snapshot.activeMonth ?? budget.monthKey}
+          currency={budget.currency}
+          database={database}
+          onExplore={(filter) =>
+            openExplorer(filter, budget.currency, [], 'TRENDS')
+          }
+          onHome={() => setScreen({ name: 'HOME' })}
+          palette={palette}
         />
       ) : queryState.status === 'READY' ? (
         <ExplorerScreen
@@ -386,13 +421,14 @@ export default function App() {
           queryResult={queryState.result}
           unrecognizedTokens={screen.unrecognizedTokens}
           onChangeFilter={(nextFilter) =>
-            openExplorer(nextFilter, budget.currency)
+            openExplorer(nextFilter, budget.currency, [], screen.returnTo)
           }
           onSearch={(parsed) =>
             openExplorer(
               parsed.query,
               budget.currency,
               parsed.unrecognizedTokens,
+              screen.returnTo,
             )
           }
           onDataChanged={() =>
@@ -402,8 +438,13 @@ export default function App() {
               budget.monthKey,
             )
           }
+          onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onBack={() => {
-            setScreen({ name: 'HOME' });
+            setScreen(
+              screen.returnTo === 'TRENDS'
+                ? { name: 'TRENDS' }
+                : { name: 'HOME' },
+            );
             setQueryState({ status: 'IDLE' });
           }}
         />
@@ -478,6 +519,7 @@ function HomeScreen({
   busy,
   onSelectMonth,
   onExplore,
+  onOpenTrends,
   onUpdateAllocation,
   onReset,
 }: {
@@ -492,6 +534,7 @@ function HomeScreen({
   readonly busy: boolean;
   readonly onSelectMonth: (month: string) => void;
   readonly onExplore: (filter: ExplorerFilter) => void;
+  readonly onOpenTrends: () => void;
   readonly onUpdateAllocation: (
     monthKey: string,
     currency: string,
@@ -805,6 +848,7 @@ function HomeScreen({
         palette={palette}
         onHome={() => undefined}
         onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
+        onTrends={onOpenTrends}
       />
     </ScrollView>
   );
@@ -1311,6 +1355,753 @@ function HeatMapCalendar({
   );
 }
 
+type TrendLoadState =
+  | { readonly status: 'LOADING' }
+  | { readonly status: 'ERROR' }
+  | { readonly status: 'READY'; readonly result: TrendQueryResult };
+
+function TrendsScreen({
+  activeMonth,
+  currency,
+  database,
+  onExplore,
+  onHome,
+  palette,
+}: {
+  readonly activeMonth: string;
+  readonly currency: string;
+  readonly database: Database;
+  readonly onExplore: (filter: LedgerQuery) => void;
+  readonly onHome: () => void;
+  readonly palette: Palette;
+}) {
+  const [selection, setSelection] = useState<TrendSelection>({
+    kind: 'OVERALL',
+  });
+  const [period, setPeriod] = useState<TrendPeriod | 'CUSTOM'>(12);
+  const [request, setRequest] = useState<TrendRequest>(() =>
+    periodRequest(activeMonth, 12, { kind: 'OVERALL' }),
+  );
+  const [customStart, setCustomStart] = useState(request.startMonth);
+  const [customEnd, setCustomEnd] = useState(request.endMonth);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [state, setState] = useState<TrendLoadState>({ status: 'LOADING' });
+  const [categories, setCategories] = useState<readonly Category[]>([]);
+  const [selectedBarId, setSelectedBarId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      queryLedgerTrends(database, request, currency),
+      listCategories(database),
+    ]).then(
+      ([result, nextCategories]) => {
+        if (active) {
+          setState({ status: 'READY', result });
+          setCategories(nextCategories);
+        }
+      },
+      () => {
+        if (active) {
+          setState({ status: 'ERROR' });
+        }
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [currency, database, request]);
+
+  const applySelection = useCallback((nextSelection: TrendSelection) => {
+    setSelection(nextSelection);
+    setSelectedBarId(null);
+    setState({ status: 'LOADING' });
+    setRequest((current) => ({ ...current, selection: nextSelection }));
+  }, []);
+  const setPreset = useCallback(
+    (nextPeriod: TrendPeriod) => {
+      setPeriod(nextPeriod);
+      setCustomError(null);
+      setSelectedBarId(null);
+      setState({ status: 'LOADING' });
+      const next = periodRequest(activeMonth, nextPeriod, selection);
+      setCustomStart(next.startMonth);
+      setCustomEnd(next.endMonth);
+      setRequest(next);
+    },
+    [activeMonth, selection],
+  );
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      testID="trends-screen"
+    >
+      <Text style={[styles.demoPill, { color: palette.accent }]}>
+        TRENDS · CANONICAL LEDGER
+      </Text>
+      <Text style={[styles.screenTitle, { color: palette.text }]}>Trends</Text>
+      <Text style={[styles.bodyText, { color: palette.muted }]}>
+        Living and Fun show included spending. Saving shows contributions. Net
+        savings movement remains separate.
+      </Text>
+
+      <View
+        style={[
+          styles.trendControls,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+      >
+        <Text style={[styles.label, { color: palette.muted }]}>PERIOD</Text>
+        <View style={styles.trendChipRow}>
+          {([3, 6, 12, 24] as const).map((item) => (
+            <FilterButton
+              key={item}
+              active={period === item}
+              label={`${item}m`}
+              onPress={() => setPreset(item)}
+              palette={palette}
+              testID={`trend-period-${item}`}
+            />
+          ))}
+          <FilterButton
+            active={period === 'CUSTOM'}
+            label="Custom"
+            onPress={() => setPeriod('CUSTOM')}
+            palette={palette}
+            testID="trend-period-custom"
+          />
+        </View>
+        {period === 'CUSTOM' ? (
+          <View style={styles.customPeriodRow}>
+            <TextInput
+              accessibilityLabel="Custom trend start month"
+              autoCapitalize="none"
+              onChangeText={setCustomStart}
+              placeholder="YYYY-MM"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.monthInput,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="trend-custom-start"
+              value={customStart}
+            />
+            <Text style={{ color: palette.muted }}>to</Text>
+            <TextInput
+              accessibilityLabel="Custom trend end month"
+              autoCapitalize="none"
+              onChangeText={setCustomEnd}
+              placeholder="YYYY-MM"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.monthInput,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="trend-custom-end"
+              value={customEnd}
+            />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                try {
+                  enumerateMonths(customStart, customEnd);
+                } catch {
+                  setCustomError(
+                    'Use valid YYYY-MM months in order. Custom periods are limited to 120 months.',
+                  );
+                  return;
+                }
+                setCustomError(null);
+                setSelectedBarId(null);
+                setState({ status: 'LOADING' });
+                setRequest({
+                  startMonth: customStart,
+                  endMonth: customEnd,
+                  selection,
+                });
+              }}
+              style={[styles.applyButton, { backgroundColor: palette.accent }]}
+              testID="trend-custom-apply"
+            >
+              <Text style={{ color: palette.accentText, fontWeight: '800' }}>
+                Apply
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {customError === null ? null : (
+          <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+            {customError}
+          </Text>
+        )}
+
+        <Text style={[styles.label, { color: palette.muted }]}>SERIES</Text>
+        <View style={styles.trendChipRow}>
+          <FilterButton
+            active={selection.kind === 'OVERALL'}
+            label="Overall"
+            onPress={() => applySelection({ kind: 'OVERALL' })}
+            palette={palette}
+            testID="trend-series-overall"
+          />
+          {SUPER_CATEGORY_KEYS.map((key) => (
+            <FilterButton
+              key={key}
+              active={
+                selection.kind === 'SUPER_CATEGORIES' &&
+                selection.superCategories.includes(key)
+              }
+              label={trendSuperLabel(key)}
+              onPress={() => {
+                const selected =
+                  selection.kind === 'SUPER_CATEGORIES'
+                    ? selection.superCategories
+                    : [];
+                const next = selected.includes(key)
+                  ? selected.filter((item) => item !== key)
+                  : [...selected, key];
+                applySelection({
+                  kind: 'SUPER_CATEGORIES',
+                  superCategories: next.length === 0 ? [key] : next,
+                });
+              }}
+              palette={palette}
+              testID={`trend-series-${key.toLowerCase()}`}
+            />
+          ))}
+        </View>
+
+        <Text style={[styles.label, { color: palette.muted }]}>CATEGORY</Text>
+        <ScrollView
+          contentContainerStyle={styles.trendChipRow}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {categories.map((category) => (
+            <FilterButton
+              key={category.id}
+              active={
+                selection.kind === 'CATEGORY' &&
+                selection.categoryId === category.id
+              }
+              label={category.name}
+              onPress={() =>
+                applySelection({
+                  kind: 'CATEGORY',
+                  categoryId: category.id,
+                  categoryName: category.name,
+                  superCategory: category.superCategory,
+                })
+              }
+              palette={palette}
+              testID={`trend-category-${category.id.replace(':', '-')}`}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      {state.status === 'LOADING' ? (
+        <View style={styles.trendLoading}>
+          <ActivityIndicator color={palette.accent} />
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            Calculating local trends…
+          </Text>
+        </View>
+      ) : state.status === 'ERROR' ? (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.notice,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+          ]}
+        >
+          <Text style={[styles.bodyText, { color: palette.text }]}>
+            Trends could not be calculated from the local ledger.
+          </Text>
+        </View>
+      ) : (
+        <TrendResults
+          model={state.result}
+          onExplore={onExplore}
+          onSelectBar={setSelectedBarId}
+          palette={palette}
+          selectedBarId={selectedBarId}
+        />
+      )}
+
+      <CoreNavigation
+        active="TRENDS"
+        onBreakdown={() => onExplore(monthQuery(activeMonth))}
+        onHome={onHome}
+        onTrends={() => undefined}
+        palette={palette}
+      />
+    </ScrollView>
+  );
+}
+
+function TrendResults({
+  model,
+  onExplore,
+  onSelectBar,
+  palette,
+  selectedBarId,
+}: {
+  readonly model: TrendModel;
+  readonly onExplore: (filter: LedgerQuery) => void;
+  readonly onSelectBar: (barId: string) => void;
+  readonly palette: Palette;
+  readonly selectedBarId: string | null;
+}) {
+  const layout = useMemo(() => createTrendChartLayout(model), [model]);
+  const allBars = model.months.flatMap(({ bars }) => bars);
+  const selectedBar =
+    allBars.find(({ id }) => id === selectedBarId) ??
+    model.months.at(-1)?.bars[0] ??
+    null;
+  const selectedMonth =
+    selectedBar === null
+      ? (model.months.at(-1) ?? null)
+      : (model.months.find(({ month }) => month === selectedBar.month) ?? null);
+  const hasActivity = allBars.some(
+    ({ actualMinor, targetMinor }) => actualMinor !== 0 || targetMinor !== null,
+  );
+
+  return (
+    <>
+      {model.otherCurrencies.length === 0 ? null : (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.notice,
+            {
+              backgroundColor: palette.surfaceMuted,
+              borderColor: palette.border,
+            },
+          ]}
+          testID="trend-currency-partition"
+        >
+          <Text style={[styles.bodyText, { color: palette.text }]}>
+            Showing {model.currency} only. {model.otherCurrencies.join(', ')}{' '}
+            activity is kept in separate currency partitions and is not summed.
+          </Text>
+        </View>
+      )}
+      <View
+        style={[
+          styles.trendChartPanel,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID="trend-chart"
+      >
+        <View style={styles.trendLegend}>
+          <Text style={[styles.smallText, { color: palette.muted }]}>
+            Solid stacks = actual · rule = stored monthly target · below axis =
+            refunds/reimbursements
+          </Text>
+        </View>
+        {!hasActivity ? (
+          <Text
+            style={[styles.bodyText, { color: palette.muted }]}
+            testID="trend-empty"
+          >
+            No activity or stored targets in this period.
+          </Text>
+        ) : null}
+        <ScrollView
+          accessibilityLabel="Monthly trend chart"
+          horizontal
+          showsHorizontalScrollIndicator
+        >
+          <View style={styles.trendMonthsRow}>
+            {model.months.map((month) => (
+              <View
+                key={month.month}
+                style={styles.trendMonthGroup}
+                testID={`trend-month-${month.month}`}
+              >
+                <View style={styles.trendBarsRow}>
+                  {month.bars.map((bar) => (
+                    <TrendBarColumn
+                      key={bar.id}
+                      bar={bar}
+                      currency={model.currency}
+                      layout={layout.bars.get(bar.id)}
+                      onExplore={onExplore}
+                      onSelect={() => onSelectBar(bar.id)}
+                      palette={palette}
+                    />
+                  ))}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${formatTrendMonth(month.month)}. Open month Breakdown.`}
+                  onPress={() => onExplore(month.drillDown)}
+                  style={styles.trendMonthButton}
+                  testID={`trend-month-drilldown-${month.month}`}
+                >
+                  <Text
+                    style={[styles.trendMonthLabel, { color: palette.text }]}
+                  >
+                    {formatTrendMonthShort(month.month)}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+      {selectedBar === null || selectedMonth === null ? null : (
+        <TrendDetailPanel
+          bar={selectedBar}
+          currency={model.currency}
+          netSavingsMovementMinor={selectedMonth.netSavingsMovementMinor}
+          onExplore={onExplore}
+          palette={palette}
+        />
+      )}
+    </>
+  );
+}
+
+function TrendBarColumn({
+  bar,
+  currency,
+  layout,
+  onExplore,
+  onSelect,
+  palette,
+}: {
+  readonly bar: TrendBar;
+  readonly currency: string;
+  readonly layout: ReturnType<
+    typeof createTrendChartLayout
+  >['bars'] extends ReadonlyMap<string, infer Layout>
+    ? Layout | undefined
+    : never;
+  readonly onExplore: (filter: LedgerQuery) => void;
+  readonly onSelect: () => void;
+  readonly palette: Palette;
+}) {
+  const positiveSegments = bar.segments.filter(
+    ({ amountMinor }) => amountMinor > 0,
+  );
+  const negativeSegments = bar.segments.filter(
+    ({ amountMinor }) => amountMinor < 0,
+  );
+  const targetHeight = layout?.targetHeight ?? null;
+  return (
+    <View
+      accessibilityLabel={`${bar.label}, ${formatMoney(money(bar.actualMinor, currency), 'en-GB')} actual`}
+      style={styles.trendBarColumn}
+      testID={`trend-bar-${bar.id}`}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Show ${bar.month} ${bar.label} detail`}
+        onPress={onSelect}
+        style={styles.trendBarValueButton}
+        testID={`trend-detail-${bar.id}`}
+      >
+        <Text
+          numberOfLines={2}
+          style={[styles.trendBarValue, { color: palette.text }]}
+        >
+          {compactMinor(bar.actualMinor, currency)}
+        </Text>
+      </Pressable>
+      <View style={styles.trendPositiveArea}>
+        {targetHeight === null ? null : (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.trendTargetRule,
+              {
+                backgroundColor: palette.text,
+                bottom: Math.max(0, targetHeight),
+              },
+            ]}
+            testID={`trend-target-${bar.id}`}
+          />
+        )}
+        <View style={styles.trendPositiveStack}>
+          {positiveSegments.map((segment, index) => {
+            const segmentLayout = layout?.segments.find(
+              ({ id }) => id === segment.id,
+            );
+            return (
+              <Pressable
+                key={segment.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${bar.month} ${segment.label}, ${compactMinor(segment.amountMinor, currency)}, ${segment.transactionCount} matching transactions. Open Breakdown.`}
+                hitSlop={8}
+                onPress={() => {
+                  onSelect();
+                  onExplore(segment.drillDown);
+                }}
+                style={[
+                  styles.trendSegment,
+                  {
+                    backgroundColor: trendSegmentColor(
+                      bar.superCategory,
+                      index,
+                      palette,
+                    ),
+                    borderColor: palette.background,
+                    height: Math.max(2, segmentLayout?.height ?? 0),
+                  },
+                ]}
+                testID={`trend-segment-${bar.month}-${segment.id.replace(':', '-')}`}
+              />
+            );
+          })}
+          {positiveSegments.length === 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${bar.month} ${bar.label}, zero actual. Open Breakdown.`}
+              onPress={() => {
+                onSelect();
+                onExplore(bar.drillDown);
+              }}
+              style={[
+                styles.trendZeroMarker,
+                { backgroundColor: palette.border },
+              ]}
+              testID={`trend-zero-${bar.id}`}
+            />
+          ) : null}
+        </View>
+      </View>
+      <View style={[styles.trendAxis, { backgroundColor: palette.border }]} />
+      <View style={styles.trendNegativeArea}>
+        {negativeSegments.map((segment, index) => {
+          const segmentLayout = layout?.segments.find(
+            ({ id }) => id === segment.id,
+          );
+          return (
+            <Pressable
+              key={segment.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${bar.month} ${segment.label}, negative ${compactMinor(Math.abs(segment.amountMinor), currency)}. Open Breakdown.`}
+              hitSlop={8}
+              onPress={() => {
+                onSelect();
+                onExplore(segment.drillDown);
+              }}
+              style={[
+                styles.trendNegativeSegment,
+                {
+                  backgroundColor: trendSegmentColor(
+                    bar.superCategory,
+                    index,
+                    palette,
+                  ),
+                  height: Math.max(2, segmentLayout?.height ?? 0),
+                },
+              ]}
+              testID={`trend-negative-${bar.month}-${segment.id.replace(':', '-')}`}
+            />
+          );
+        })}
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${bar.month} ${bar.label} Breakdown`}
+        onPress={() => {
+          onSelect();
+          onExplore(bar.drillDown);
+        }}
+        style={styles.trendBarLabelButton}
+        testID={`trend-bar-drilldown-${bar.id}`}
+      >
+        <Text
+          numberOfLines={2}
+          style={[
+            styles.trendBarLabel,
+            { color: categoryColor(bar.superCategory, palette) },
+          ]}
+        >
+          {bar.label}
+        </Text>
+      </Pressable>
+      <Text style={[styles.trendTargetLabel, { color: palette.muted }]}>
+        {bar.targetMinor === null
+          ? 'No category target'
+          : bar.targetMinor === 0
+            ? 'Target £0'
+            : `T ${compactMinor(bar.targetMinor, currency)}`}
+      </Text>
+    </View>
+  );
+}
+
+function TrendDetailPanel({
+  bar,
+  currency,
+  netSavingsMovementMinor,
+  onExplore,
+  palette,
+}: {
+  readonly bar: TrendBar;
+  readonly currency: string;
+  readonly netSavingsMovementMinor: number;
+  readonly onExplore: (filter: LedgerQuery) => void;
+  readonly palette: Palette;
+}) {
+  const difference =
+    bar.targetMinor === null ? null : bar.targetMinor - bar.actualMinor;
+  const breached = difference !== null && difference < 0;
+  return (
+    <View
+      style={[
+        styles.trendDetail,
+        { backgroundColor: palette.surface, borderColor: palette.border },
+      ]}
+      testID="trend-detail-panel"
+    >
+      <Text style={[styles.sectionKicker, { color: palette.accent }]}>
+        {formatTrendMonth(bar.month).toUpperCase()} · {bar.label.toUpperCase()}
+      </Text>
+      <View style={styles.trendDetailMetrics}>
+        <SummaryMetric
+          label={
+            bar.measure === 'SAVING_CONTRIBUTIONS' ? 'CONTRIBUTED' : 'ACTUAL'
+          }
+          palette={palette}
+          value={formatMoney(money(bar.actualMinor, currency), 'en-GB')}
+        />
+        <SummaryMetric
+          label="STORED TARGET"
+          palette={palette}
+          value={
+            bar.targetMinor === null
+              ? 'Not applicable'
+              : formatMoney(money(bar.targetMinor, currency), 'en-GB')
+          }
+        />
+      </View>
+      <Text
+        style={[
+          styles.bodyTextStrong,
+          { color: breached ? palette.breach : palette.text },
+        ]}
+      >
+        {difference === null
+          ? 'Categories do not have a separate target.'
+          : difference < 0
+            ? `${formatMoney(money(-difference, currency), 'en-GB')} over`
+            : difference === 0
+              ? 'Exactly on target'
+              : `${formatMoney(money(difference, currency), 'en-GB')} ${bar.superCategory === 'SAVING' ? 'to go' : 'under'}`}
+      </Text>
+      <Text style={[styles.smallText, { color: palette.muted }]}>
+        {bar.transactionCount} matching transaction
+        {bar.transactionCount === 1 ? '' : 's'} ·{' '}
+        {bar.measure === 'SAVING_CONTRIBUTIONS'
+          ? 'Saving contributions'
+          : 'Included spending'}
+      </Text>
+      {bar.superCategory === 'SAVING' ? (
+        <Text style={[styles.bodyText, { color: palette.warning }]}>
+          Net savings movement:{' '}
+          {formatMoney(money(netSavingsMovementMinor, currency), 'en-GB')}
+        </Text>
+      ) : null}
+      <Text style={[styles.label, { color: palette.muted }]}>COMPOSITION</Text>
+      {bar.segments.length === 0 ? (
+        <Text style={[styles.bodyText, { color: palette.muted }]}>
+          No matching category activity.
+        </Text>
+      ) : (
+        bar.segments.map((segment) => (
+          <Pressable
+            key={segment.id}
+            accessibilityRole="button"
+            onPress={() => onExplore(segment.drillDown)}
+            style={[
+              styles.trendCompositionRow,
+              { borderBottomColor: palette.border },
+            ]}
+            testID={`trend-composition-${segment.id.replace(':', '-')}`}
+          >
+            <View>
+              <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
+                {segment.label}
+              </Text>
+              <Text style={[styles.smallText, { color: palette.muted }]}>
+                {segment.transactionCount} transaction
+                {segment.transactionCount === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.bodyTextStrong,
+                {
+                  color:
+                    segment.amountMinor < 0 ? palette.warning : palette.text,
+                },
+              ]}
+            >
+              {formatMoney(money(segment.amountMinor, currency), 'en-GB')}
+            </Text>
+          </Pressable>
+        ))
+      )}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => onExplore(bar.drillDown)}
+        style={[styles.primaryButton, { backgroundColor: palette.accent }]}
+        testID="trend-view-transactions"
+      >
+        <Text style={[styles.primaryButtonText, { color: palette.accentText }]}>
+          View {bar.transactionCount} matching transaction
+          {bar.transactionCount === 1 ? '' : 's'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function FilterButton({
+  active,
+  label,
+  onPress,
+  palette,
+  testID,
+}: {
+  readonly active: boolean;
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly palette: Palette;
+  readonly testID: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[
+        styles.trendChip,
+        {
+          backgroundColor: active ? palette.accent : palette.surfaceMuted,
+          borderColor: active ? palette.accent : palette.border,
+        },
+      ]}
+      testID={testID}
+    >
+      <Text
+        style={{
+          color: active ? palette.accentText : palette.text,
+          fontWeight: '700',
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function ExplorerScreen({
   database,
   palette,
@@ -1321,6 +2112,7 @@ function ExplorerScreen({
   onChangeFilter,
   onSearch,
   onDataChanged,
+  onOpenTrends,
   onBack,
 }: {
   readonly database: Database;
@@ -1332,6 +2124,7 @@ function ExplorerScreen({
   readonly onChangeFilter: (filter: ExplorerFilter) => void;
   readonly onSearch: (parsed: ParsedLedgerSearch) => void;
   readonly onDataChanged: () => Promise<void>;
+  readonly onOpenTrends: () => void;
   readonly onBack: () => void;
 }) {
   const [searchText, setSearchText] = useState('');
@@ -1833,6 +2626,7 @@ function ExplorerScreen({
         palette={palette}
         onHome={onBack}
         onBreakdown={() => undefined}
+        onTrends={onOpenTrends}
       />
     </ScrollView>
   );
@@ -2957,11 +3751,13 @@ function CoreNavigation({
   palette,
   onHome,
   onBreakdown,
+  onTrends,
 }: {
-  readonly active: 'HOME' | 'BREAKDOWN';
+  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS';
   readonly palette: Palette;
   readonly onHome: () => void;
   readonly onBreakdown: () => void;
+  readonly onTrends: () => void;
 }) {
   return (
     <View
@@ -2983,7 +3779,12 @@ function CoreNavigation({
         palette={palette}
         onPress={onBreakdown}
       />
-      <Destination label="Trends" palette={palette} />
+      <Destination
+        label="Trends"
+        active={active === 'TRENDS'}
+        palette={palette}
+        onPress={onTrends}
+      />
       <Destination label="Subscriptions" palette={palette} />
     </View>
   );
@@ -3081,6 +3882,45 @@ function categoryColor(
     return palette.saving;
   }
   return palette.fun;
+}
+
+function trendSuperLabel(key: SuperCategoryKey): string {
+  if (key === 'LIVING') {
+    return 'Living';
+  }
+  if (key === 'SAVING') {
+    return 'Saving';
+  }
+  return 'Fun';
+}
+
+function trendSegmentColor(
+  key: SuperCategoryKey,
+  index: number,
+  palette: Palette,
+): string {
+  const opacity = ['ff', 'd9', 'b3', '8c', '66'][index % 5] ?? 'ff';
+  return `${categoryColor(key, palette)}${opacity}`;
+}
+
+function compactMinor(amountMinor: number, currency: string): string {
+  return formatMoney(money(amountMinor, currency), 'en-GB');
+}
+
+function formatTrendMonth(month: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${month}-01T00:00:00.000Z`));
+}
+
+function formatTrendMonthShort(month: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'short',
+    year: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(`${month}-01T00:00:00.000Z`));
 }
 
 function formatActivityDate(date: string): string {
@@ -3590,6 +4430,177 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
+  },
+  trendControls: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  trendChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  trendChip: {
+    minHeight: 44,
+    minWidth: 58,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customPeriodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  monthInput: {
+    minHeight: 44,
+    width: 102,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    fontSize: 15,
+  },
+  applyButton: {
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendLoading: {
+    minHeight: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  trendChartPanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 14,
+    gap: 10,
+    overflow: 'hidden',
+  },
+  trendLegend: { paddingHorizontal: 14 },
+  trendMonthsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+    gap: 14,
+  },
+  trendMonthGroup: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  trendBarsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  trendBarColumn: {
+    width: 68,
+    alignItems: 'center',
+  },
+  trendBarValue: {
+    width: 68,
+    fontSize: 10,
+    lineHeight: 12,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  trendBarValueButton: {
+    width: 68,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendPositiveArea: {
+    width: 46,
+    height: 180,
+    position: 'relative',
+    justifyContent: 'flex-end',
+  },
+  trendPositiveStack: {
+    width: 32,
+    alignSelf: 'center',
+    justifyContent: 'flex-end',
+  },
+  trendSegment: {
+    width: 32,
+    minHeight: 2,
+    borderTopWidth: 1,
+  },
+  trendTargetRule: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    zIndex: 2,
+  },
+  trendZeroMarker: {
+    width: 32,
+    height: 3,
+    alignSelf: 'center',
+  },
+  trendAxis: { width: 52, height: 1 },
+  trendNegativeArea: {
+    width: 32,
+    height: 72,
+    alignItems: 'stretch',
+  },
+  trendNegativeSegment: {
+    width: 32,
+    minHeight: 2,
+  },
+  trendBarLabelButton: {
+    minHeight: 44,
+    width: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendBarLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  trendTargetLabel: {
+    width: 68,
+    minHeight: 28,
+    fontSize: 9,
+    lineHeight: 12,
+    textAlign: 'center',
+  },
+  trendMonthButton: {
+    minHeight: 44,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendMonthLabel: { fontSize: 12, fontWeight: '800' },
+  trendDetail: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  trendDetailMetrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  trendCompositionRow: {
+    minHeight: 52,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   coreNavigation: {
     marginTop: 16,

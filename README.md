@@ -40,7 +40,10 @@ Breakdown backed by typed local queries. Breakdown now supports auditable
 category/type/scope/note corrections, exact-conservation splits, undo,
 future-only merchant rules, Needs Review, deterministic local search with
 visible filters, and canonical structured filters. It never connects to Monzo,
-the network, or real credentials.
+the network, or real credentials. Trends adds 3/6/12/24-month and custom
+periods, overall semantic series, single and grouped category stacks, stored
+historical target overlays, and exact Breakdown drill-downs. Currency
+partitions are labelled and never summed.
 
 The highest-risk area is **Monzo authentication/sync for a phone-only local app**, not the budgeting logic. The Monzo Developer API is suitable for a personal/small-user project, but its OAuth model creates constraints for a purely client-side app. See `docs/MONZO_INTEGRATION.md`.
 
