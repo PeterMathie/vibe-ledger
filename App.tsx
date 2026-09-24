@@ -1,13 +1,16 @@
+import { usePreventScreenCapture } from 'expo-screen-capture';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Svg, { Circle, G } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
+  AccessibilityInfo,
   Alert,
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +19,16 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 
+import {
+  asyncStateLabel,
+  heatMapDayLabel,
+  visibleHeatMapCue,
+} from './src/app/accessibility';
+import {
+  formatLocalDataChange,
+  parseRestoreText,
+  serializePortableExport,
+} from './src/app/settings';
 import {
   createRunoverModel,
   DEFAULT_ALLOCATION,
@@ -48,6 +61,14 @@ import {
   type LedgerSnapshot,
   type TrendQueryResult,
 } from './src/data/demo-repository';
+import {
+  exportLocalData,
+  getLocalReadiness,
+  PORTABLE_EXPORT_WARNING,
+  restoreLocalData,
+  wipeLocalData,
+  type LocalReadiness,
+} from './src/data/local-data';
 import {
   createMerchantRule,
   listCategories,
@@ -120,13 +141,15 @@ type Screen =
   | { readonly name: 'HOME' }
   | { readonly name: 'TRENDS' }
   | { readonly name: 'SUBSCRIPTIONS' }
+  | { readonly name: 'SETTINGS' }
   | { readonly name: 'MONEY_MAP' }
   | {
       readonly name: 'EXPLORER';
       readonly filter: ExplorerFilter;
       readonly currency: string;
       readonly unrecognizedTokens: readonly string[];
-      readonly returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP';
+      readonly returnTo:
+        'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' | 'SETTINGS';
     };
 
 type QueryLoadState =
@@ -181,7 +204,33 @@ const DARK: Palette = {
   warning: '#efb35d',
 };
 
+const DEMO_MODE_ENABLED = process.env.EXPO_PUBLIC_DEMO_MODE !== 'false';
+
+function useReducedMotion(): boolean {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) {
+        setReducedMotion(enabled);
+      }
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReducedMotion,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  return reducedMotion;
+}
+
 export default function App() {
+  usePreventScreenCapture('vibe-ledger-financial-screens');
   const palette = useColorScheme() === 'dark' ? DARK : LIGHT;
   const [database, setDatabase] = useState<Database | null>(null);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'LOADING' });
@@ -190,6 +239,18 @@ export default function App() {
     status: 'IDLE',
   });
   const [busyAction, setBusyAction] = useState<'LOAD' | 'RESET' | null>(null);
+
+  const retryInitialize = useCallback(async () => {
+    setLoadState({ status: 'LOADING' });
+    try {
+      const readyDatabase = await initializeApplication();
+      setDatabase(readyDatabase);
+      const snapshot = await loadLedgerSnapshot(readyDatabase);
+      setLoadState(toLoadState(snapshot));
+    } catch {
+      setLoadState({ status: 'ERROR' });
+    }
+  }, []);
 
   const refresh = useCallback(
     async (nextDatabase: Database, requestedMonth?: string) => {
@@ -286,7 +347,8 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       unrecognizedTokens: readonly string[] = [],
-      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' = 'HOME',
+      returnTo:
+        'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' | 'SETTINGS' = 'HOME',
     ) => {
       if (database === null) {
         return;
@@ -339,7 +401,7 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       month: string,
-      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP',
+      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' | 'SETTINGS',
     ) => {
       if (database === null) {
         return;
@@ -366,26 +428,52 @@ export default function App() {
       <StateScreen
         palette={palette}
         title="Local ledger unavailable"
-        body="The local database could not be prepared. Restart the app to try again."
+        body="The local database could not be prepared. Try again without leaving the app."
+        onRetry={() => void retryInitialize()}
       />
     );
   }
 
-  if (loadState.status === 'EMPTY') {
-    return (
-      <DemoEmptyState
-        palette={palette}
-        loading={busyAction === 'LOAD'}
-        onLoad={loadDemo}
-      />
-    );
-  }
   if (database === null) {
     return (
       <StateScreen
         palette={palette}
         title="Local ledger unavailable"
-        body="The local database could not be prepared. Restart the app to try again."
+        body="The local database could not be prepared. Try again without leaving the app."
+        onRetry={() => void retryInitialize()}
+      />
+    );
+  }
+
+  if (loadState.status === 'EMPTY') {
+    if (screen.name === 'SETTINGS') {
+      return (
+        <SafeAreaView
+          style={[styles.safeArea, { backgroundColor: palette.background }]}
+        >
+          <SettingsScreen
+            database={database}
+            onDataChanged={async () => {
+              await refresh(database);
+              setScreen({ name: 'HOME' });
+            }}
+            onHome={() => setScreen({ name: 'HOME' })}
+            onOpenBreakdown={() => setScreen({ name: 'HOME' })}
+            onOpenSubscriptions={() => setScreen({ name: 'HOME' })}
+            onOpenTrends={() => setScreen({ name: 'HOME' })}
+            palette={palette}
+          />
+          <StatusBar style={palette === DARK ? 'light' : 'dark'} />
+        </SafeAreaView>
+      );
+    }
+    return (
+      <DemoEmptyState
+        demoAvailable={DEMO_MODE_ENABLED}
+        palette={palette}
+        loading={busyAction === 'LOAD'}
+        onLoad={loadDemo}
+        onSettings={() => setScreen({ name: 'SETTINGS' })}
       />
     );
   }
@@ -394,9 +482,11 @@ export default function App() {
   if (snapshot.ledgerMonth === null) {
     return (
       <DemoEmptyState
+        demoAvailable={DEMO_MODE_ENABLED}
         palette={palette}
         loading={busyAction === 'LOAD'}
         onLoad={loadDemo}
+        onSettings={() => setScreen({ name: 'SETTINGS' })}
       />
     );
   }
@@ -421,6 +511,7 @@ export default function App() {
           onExplore={(filter) => openExplorer(filter, budget.currency)}
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenSettings={() => setScreen({ name: 'SETTINGS' })}
           onOpenMoneyMap={() => setScreen({ name: 'MONEY_MAP' })}
           onUpdateAllocation={updateAllocation}
           onReset={resetDemo}
@@ -435,6 +526,7 @@ export default function App() {
           }
           onHome={() => setScreen({ name: 'HOME' })}
           onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenSettings={() => setScreen({ name: 'SETTINGS' })}
           palette={palette}
         />
       ) : screen.name === 'SUBSCRIPTIONS' ? (
@@ -457,6 +549,7 @@ export default function App() {
           }
           onHome={() => setScreen({ name: 'HOME' })}
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
+          onOpenSettings={() => setScreen({ name: 'SETTINGS' })}
           onOpenBreakdown={() =>
             openExplorer(monthQuery(budget.monthKey), budget.currency)
           }
@@ -479,6 +572,24 @@ export default function App() {
           onHome={() => setScreen({ name: 'HOME' })}
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenSettings={() => setScreen({ name: 'SETTINGS' })}
+          palette={palette}
+        />
+      ) : screen.name === 'SETTINGS' ? (
+        <SettingsScreen
+          database={database}
+          onDataChanged={() => refresh(database, budget.monthKey)}
+          onHome={() => setScreen({ name: 'HOME' })}
+          onOpenBreakdown={() =>
+            openExplorer(
+              monthQuery(budget.monthKey),
+              budget.currency,
+              [],
+              'SETTINGS',
+            )
+          }
+          onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           palette={palette}
         />
       ) : queryState.status === 'READY' ? (
@@ -511,6 +622,7 @@ export default function App() {
           }
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenSettings={() => setScreen({ name: 'SETTINGS' })}
           onBack={() => {
             setScreen(
               screen.returnTo === 'TRENDS'
@@ -519,26 +631,43 @@ export default function App() {
                   ? { name: 'SUBSCRIPTIONS' }
                   : screen.returnTo === 'MONEY_MAP'
                     ? { name: 'MONEY_MAP' }
-                    : { name: 'HOME' },
+                    : screen.returnTo === 'SETTINGS'
+                      ? { name: 'SETTINGS' }
+                      : { name: 'HOME' },
             );
             setQueryState({ status: 'IDLE' });
           }}
         />
       ) : (
-        <QueryStateScreen palette={palette} status={queryState.status} />
+        <QueryStateScreen
+          palette={palette}
+          status={queryState.status}
+          onRetry={() =>
+            openExplorer(
+              screen.filter,
+              screen.currency,
+              screen.unrecognizedTokens,
+              screen.returnTo,
+            )
+          }
+        />
       )}
     </SafeAreaView>
   );
 }
 
 function DemoEmptyState({
+  demoAvailable,
   palette,
   loading,
   onLoad,
+  onSettings,
 }: {
+  readonly demoAvailable: boolean;
   readonly palette: Palette;
   readonly loading: boolean;
   readonly onLoad: () => void;
+  readonly onSettings: () => void;
 }) {
   return (
     <SafeAreaView
@@ -546,38 +675,62 @@ function DemoEmptyState({
     >
       <View style={styles.centered}>
         <Text style={[styles.demoPill, { color: palette.accent }]}>
-          LOCAL DEMO DATA
+          {demoAvailable ? 'LOCAL DEMO DATA' : 'LOCAL LEDGER'}
         </Text>
         <Text style={[styles.heroTitle, { color: palette.text }]}>
-          Explore the money model safely
+          {demoAvailable
+            ? 'Explore the money model safely'
+            : 'Your local ledger is empty'}
         </Text>
         <Text style={[styles.heroBody, { color: palette.muted }]}>
-          Load deterministic synthetic transactions into this device only. No
-          Monzo connection, network request, account, or credential is used.
+          {demoAvailable
+            ? 'Load deterministic synthetic transactions into this device only. No Monzo connection, network request, account, or credential is used.'
+            : 'Restore a Vibe Ledger export from Settings. This production build contains no synthetic transaction history.'}
         </Text>
+        {demoAvailable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Load synthetic Demo Data"
+            accessibilityState={{ busy: loading, disabled: loading }}
+            disabled={loading}
+            onPress={onLoad}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              { backgroundColor: palette.accent, opacity: pressed ? 0.8 : 1 },
+            ]}
+            testID="demo-load"
+          >
+            {loading ? (
+              <ActivityIndicator
+                accessibilityLabel="Loading synthetic Demo Data"
+                color={palette.accentText}
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.primaryButtonText,
+                  { color: palette.accentText },
+                ]}
+              >
+                Load Demo Data
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Load synthetic Demo Data"
-          disabled={loading}
-          onPress={onLoad}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            { backgroundColor: palette.accent, opacity: pressed ? 0.8 : 1 },
-          ]}
-          testID="demo-load"
+          accessibilityLabel="Open Settings and local data restore"
+          onPress={onSettings}
+          style={styles.secondaryButton}
         >
-          {loading ? (
-            <ActivityIndicator color={palette.accentText} />
-          ) : (
-            <Text
-              style={[styles.primaryButtonText, { color: palette.accentText }]}
-            >
-              Load Demo Data
-            </Text>
-          )}
+          <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+            Settings and restore
+          </Text>
         </Pressable>
         <Text style={[styles.smallText, { color: palette.muted }]}>
-          Import is idempotent. Reset removes only demo-owned records.
+          {demoAvailable
+            ? 'Import is idempotent. Reset removes only demo-owned records.'
+            : 'All analytics remain offline and local to this device.'}
         </Text>
       </View>
       <StatusBar style={palette === DARK ? 'light' : 'dark'} />
@@ -597,6 +750,7 @@ function HomeScreen({
   onExplore,
   onOpenTrends,
   onOpenSubscriptions,
+  onOpenSettings,
   onOpenMoneyMap,
   onUpdateAllocation,
   onReset,
@@ -614,6 +768,7 @@ function HomeScreen({
   readonly onExplore: (filter: ExplorerFilter) => void;
   readonly onOpenTrends: () => void;
   readonly onOpenSubscriptions: () => void;
+  readonly onOpenSettings: () => void;
   readonly onOpenMoneyMap: () => void;
   readonly onUpdateAllocation: (
     monthKey: string,
@@ -703,7 +858,10 @@ function HomeScreen({
           <Text style={[styles.demoPill, { color: palette.accent }]}>
             LOCAL · SYNTHETIC DEMO
           </Text>
-          <Text style={[styles.screenTitle, { color: palette.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.screenTitle, { color: palette.text }]}
+          >
             {viewModel.monthLabel}
           </Text>
         </View>
@@ -715,6 +873,7 @@ function HomeScreen({
             <Pressable
               key={month}
               accessibilityRole="button"
+              accessibilityLabel={`Show ${formatTrendMonth(month)}`}
               accessibilityState={{ selected: month === activeMonth }}
               onPress={() => onSelectMonth(month)}
               style={[
@@ -743,6 +902,7 @@ function HomeScreen({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reset synthetic Demo Data"
+          accessibilityState={{ busy, disabled: busy }}
           disabled={busy}
           onPress={onReset}
           style={styles.textButton}
@@ -821,6 +981,8 @@ function HomeScreen({
         <View style={styles.allocationActions}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Edit exact allocation percentages"
+            accessibilityState={{ disabled: !allocationEditable }}
             disabled={!allocationEditable}
             onPress={() => setAllocationEditorOpen(true)}
             style={styles.secondaryButton}
@@ -832,6 +994,8 @@ function HomeScreen({
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Reset allocation to Living 50%, Saving 30%, Fun 20%"
+            accessibilityState={{ disabled: !allocationEditable }}
             disabled={!allocationEditable}
             onPress={() => commitAllocation(DEFAULT_ALLOCATION)}
             style={styles.secondaryButton}
@@ -890,7 +1054,10 @@ function HomeScreen({
         </Pressable>
       )}
 
-      <Text style={[styles.sectionKicker, { color: palette.accent }]}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.sectionKicker, { color: palette.accent }]}
+      >
         CURRENT POSITION
       </Text>
       <View
@@ -910,7 +1077,10 @@ function HomeScreen({
         ))}
       </View>
 
-      <Text style={[styles.sectionKicker, { color: palette.accent }]}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.sectionKicker, { color: palette.accent }]}
+      >
         MONTHLY SPENDING PACE
       </Text>
       <Text style={[styles.bodyText, { color: palette.muted }]}>
@@ -953,6 +1123,7 @@ function HomeScreen({
         onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
         onTrends={onOpenTrends}
         onSubscriptions={onOpenSubscriptions}
+        onSettings={onOpenSettings}
       />
     </ScrollView>
   );
@@ -1299,6 +1470,7 @@ function AllocationEditor({
     <Modal animationType="none" onRequestClose={onCancel} transparent visible>
       <View style={styles.modalBackdrop}>
         <View
+          accessibilityViewIsModal
           style={[
             styles.modalCard,
             { backgroundColor: palette.surface, borderColor: palette.border },
@@ -1402,35 +1574,60 @@ function HeatMapCalendar({
       ]}
       testID="monthly-heat-map"
     >
-      <View style={styles.weekRow}>
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-          <Text key={day} style={[styles.weekLabel, { color: palette.muted }]}>
-            {day.slice(0, 1)}
-          </Text>
-        ))}
-      </View>
-      <View style={styles.calendarGrid}>
-        {Array.from({ length: heatMap.leadingBlankCount }, (_, index) => (
-          <View key={`blank:${index}`} style={styles.calendarCell} />
-        ))}
-        {heatMap.days.map((day) => (
-          <Pressable
-            key={day.date}
-            accessibilityRole="button"
-            accessibilityLabel={`${formatActivityDate(day.date)}. ${formatMoney(money(day.amountMinor, currency), 'en-GB')}. ${day.status}. Open exact-date Breakdown.`}
-            onPress={() => onSelectDate(day.date)}
-            style={[
-              styles.calendarCell,
-              { backgroundColor: heatColor(day, palette) },
-            ]}
-            testID={`day-${day.date}`}
+      <ScrollView
+        accessibilityLabel="Monthly spending calendar"
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        <View style={styles.calendarContent}>
+          <View
+            accessibilityRole="header"
+            importantForAccessibility="no-hide-descendants"
+            style={styles.weekRow}
           >
-            <Text style={[styles.calendarDay, { color: palette.text }]}>
-              {day.day}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+              <Text
+                key={day}
+                style={[styles.weekLabel, { color: palette.muted }]}
+              >
+                {day.slice(0, 1)}
+              </Text>
+            ))}
+          </View>
+          <View style={styles.calendarGrid}>
+            {Array.from({ length: heatMap.leadingBlankCount }, (_, index) => (
+              <View key={`blank:${index}`} style={styles.calendarCell} />
+            ))}
+            {heatMap.days.map((day) => (
+              <Pressable
+                key={day.date}
+                accessibilityRole="button"
+                accessibilityLabel={heatMapDayLabel(
+                  formatActivityDate(day.date),
+                  formatMoney(money(day.amountMinor, currency), 'en-GB'),
+                  day.status,
+                )}
+                onPress={() => onSelectDate(day.date)}
+                style={[
+                  styles.calendarCell,
+                  { backgroundColor: heatColor(day, palette) },
+                ]}
+                testID={`day-${day.date}`}
+              >
+                <Text style={[styles.calendarDay, { color: palette.text }]}>
+                  {day.day}
+                </Text>
+                <Text
+                  importantForAccessibility="no"
+                  style={[styles.calendarCue, { color: palette.text }]}
+                >
+                  {visibleHeatMapCue(day.tone)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
       <View style={styles.heatLegend}>
         <View
           style={[
@@ -1438,12 +1635,12 @@ function HeatMapCalendar({
             { backgroundColor: palette.surfaceMuted },
           ]}
         />
-        <Text style={[styles.legendText, { color: palette.muted }]}>£0</Text>
+        <Text style={[styles.legendText, { color: palette.muted }]}>– £0</Text>
         <View
           style={[styles.legendGradientGreen, { backgroundColor: palette.fun }]}
         />
         <Text style={[styles.legendText, { color: palette.muted }]}>
-          daily reference
+          • up to daily reference
         </Text>
         <View
           style={[
@@ -1452,7 +1649,7 @@ function HeatMapCalendar({
           ]}
         />
         <Text style={[styles.legendText, { color: palette.muted }]}>
-          monthly cap+
+          ! over daily reference
         </Text>
       </View>
     </View>
@@ -1474,6 +1671,7 @@ function SubscriptionsScreen({
   onHome,
   onOpenBreakdown,
   onOpenTrends,
+  onOpenSettings,
   palette,
 }: {
   readonly database: Database;
@@ -1481,6 +1679,7 @@ function SubscriptionsScreen({
   readonly onHome: () => void;
   readonly onOpenBreakdown: () => void;
   readonly onOpenTrends: () => void;
+  readonly onOpenSettings: () => void;
   readonly palette: Palette;
 }) {
   const [state, setState] = useState<SubscriptionLoadState>({
@@ -1532,7 +1731,10 @@ function SubscriptionsScreen({
       </Text>
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.screenTitle, { color: palette.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.screenTitle, { color: palette.text }]}
+          >
             Recurring commitments
           </Text>
           <Text style={[styles.bodyText, { color: palette.muted }]}>
@@ -1541,6 +1743,7 @@ function SubscriptionsScreen({
           </Text>
         </View>
         <Pressable
+          accessibilityLabel="Add subscription"
           accessibilityRole="button"
           onPress={() => setEditing('NEW')}
           style={[styles.secondaryButton, { backgroundColor: palette.accent }]}
@@ -1553,8 +1756,17 @@ function SubscriptionsScreen({
       </View>
 
       {state.status === 'LOADING' ? (
-        <View style={styles.trendLoading} testID="subscriptions-loading">
-          <ActivityIndicator color={palette.accent} />
+        <View
+          accessibilityLabel={asyncStateLabel('local subscriptions', 'LOADING')}
+          accessibilityLiveRegion="polite"
+          accessibilityState={{ busy: true }}
+          style={styles.trendLoading}
+          testID="subscriptions-loading"
+        >
+          <ActivityIndicator
+            accessibilityElementsHidden
+            color={palette.accent}
+          />
           <Text style={[styles.bodyText, { color: palette.muted }]}>
             Loading local subscriptions…
           </Text>
@@ -1571,11 +1783,22 @@ function SubscriptionsScreen({
           <Text style={[styles.bodyText, { color: palette.text }]}>
             Subscription metadata could not be loaded from local storage.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void refreshSubscriptions()}
+            style={styles.secondaryButton}
+            testID="subscriptions-retry"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              Try again
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <>
           {summaries.map((summary) => (
             <View
+              accessible
               key={summary.currency}
               accessibilityLabel={`${summary.currency} subscription summary`}
               style={[
@@ -1747,6 +1970,8 @@ function SubscriptionsScreen({
           </Text>
           {readyState === null || readyState.records.length === 0 ? (
             <View
+              accessible
+              accessibilityLabel={asyncStateLabel('subscriptions', 'EMPTY')}
               style={[
                 styles.notice,
                 {
@@ -1815,6 +2040,7 @@ function SubscriptionsScreen({
         onBreakdown={onOpenBreakdown}
         onHome={onHome}
         onSubscriptions={() => undefined}
+        onSettings={onOpenSettings}
         onTrends={onOpenTrends}
         palette={palette}
       />
@@ -1914,6 +2140,7 @@ function SubscriptionCard({
       </Text>
       <View style={styles.subscriptionActions}>
         <Pressable
+          accessibilityLabel={`Open ${subscription.name} Breakdown`}
           accessibilityRole="button"
           onPress={onExplore}
           style={styles.secondaryButton}
@@ -1924,6 +2151,7 @@ function SubscriptionCard({
           </Text>
         </Pressable>
         <Pressable
+          accessibilityLabel={`Edit ${subscription.name}`}
           accessibilityRole="button"
           onPress={onEdit}
           style={styles.secondaryButton}
@@ -1935,6 +2163,7 @@ function SubscriptionCard({
         </Pressable>
         {subscription.active ? (
           <Pressable
+            accessibilityLabel={`Stop tracking ${subscription.name}`}
             accessibilityRole="button"
             onPress={onDisable}
             style={styles.secondaryButton}
@@ -1967,6 +2196,7 @@ function SubscriptionEditor({
   readonly onSaved: () => void;
   readonly palette: Palette;
 }) {
+  const reducedMotion = useReducedMotion();
   const current = existing?.subscription;
   const [name, setName] = useState(current?.name ?? '');
   const [amount, setAmount] = useState(
@@ -2063,7 +2293,12 @@ function SubscriptionEditor({
     }
   };
   return (
-    <Modal animationType="fade" onRequestClose={onCancel} transparent visible>
+    <Modal
+      animationType={reducedMotion ? 'none' : 'fade'}
+      onRequestClose={onCancel}
+      transparent
+      visible
+    >
       <ScrollView
         contentContainerStyle={styles.modalScroll}
         style={styles.modalScrollView}
@@ -2076,7 +2311,10 @@ function SubscriptionEditor({
           ]}
           testID="subscription-editor"
         >
-          <Text style={[styles.cardTitle, { color: palette.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.cardTitle, { color: palette.text }]}
+          >
             {current === undefined ? 'Add subscription' : 'Edit subscription'}
           </Text>
           <TextInput
@@ -2314,6 +2552,459 @@ function renewalIntentLabel(intent: RenewalIntent): string {
   }[intent];
 }
 
+type SettingsLoadState =
+  | { readonly status: 'LOADING' }
+  | { readonly status: 'ERROR' }
+  | { readonly status: 'READY'; readonly readiness: LocalReadiness };
+
+function SettingsScreen({
+  database,
+  onDataChanged,
+  onHome,
+  onOpenBreakdown,
+  onOpenSubscriptions,
+  onOpenTrends,
+  palette,
+}: {
+  readonly database: Database;
+  readonly onDataChanged: () => Promise<void>;
+  readonly onHome: () => void;
+  readonly onOpenBreakdown: () => void;
+  readonly onOpenSubscriptions: () => void;
+  readonly onOpenTrends: () => void;
+  readonly palette: Palette;
+}) {
+  const [state, setState] = useState<SettingsLoadState>({
+    status: 'LOADING',
+  });
+  const [busyAction, setBusyAction] = useState<
+    'EXPORT' | 'RESTORE' | 'WIPE' | null
+  >(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreText, setRestoreText] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshReadiness = useCallback(async () => {
+    setState({ status: 'LOADING' });
+    try {
+      setState({
+        status: 'READY',
+        readiness: await getLocalReadiness(database),
+      });
+    } catch {
+      setState({ status: 'ERROR' });
+    }
+  }, [database]);
+
+  useEffect(() => {
+    void getLocalReadiness(database).then(
+      (readiness) => setState({ status: 'READY', readiness }),
+      () => setState({ status: 'ERROR' }),
+    );
+  }, [database]);
+
+  const shareExport = useCallback(async () => {
+    setBusyAction('EXPORT');
+    setError(null);
+    setMessage(null);
+    try {
+      const portable = await exportLocalData(
+        database,
+        new Date().toISOString(),
+      );
+      await Share.share({
+        title: 'Vibe Ledger local data export',
+        message: serializePortableExport(portable),
+      });
+      setMessage('The export share sheet was closed.');
+    } catch {
+      setError('The local data export could not be prepared or shared.');
+    } finally {
+      setBusyAction(null);
+    }
+  }, [database]);
+
+  const confirmExport = () => {
+    Alert.alert('Export sensitive financial data?', PORTABLE_EXPORT_WARNING, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Continue to Share', onPress: () => void shareExport() },
+    ]);
+  };
+
+  const runRestore = async (input: unknown) => {
+    setBusyAction('RESTORE');
+    setError(null);
+    setMessage(null);
+    try {
+      await restoreLocalData(database, input);
+    } catch {
+      setError('Restore failed. Current local data was not replaced.');
+      setBusyAction(null);
+      return;
+    }
+    try {
+      await onDataChanged();
+      await refreshReadiness();
+      setRestoreOpen(false);
+      setRestoreText('');
+      setMessage('Local data restored.');
+    } catch {
+      setError(
+        'Local data was restored, but the refreshed view is unavailable. Restart the app to continue.',
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const confirmRestore = () => {
+    let input: unknown;
+    try {
+      input = parseRestoreText(restoreText);
+    } catch {
+      setError('The pasted restore data is not valid JSON.');
+      return;
+    }
+    Alert.alert(
+      'Replace all local ledger data?',
+      'Restore validates the export, then replaces current local ledger data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Replace and restore',
+          style: 'destructive',
+          onPress: () => void runRestore(input),
+        },
+      ],
+    );
+  };
+
+  const runWipe = async () => {
+    setBusyAction('WIPE');
+    setError(null);
+    setMessage(null);
+    try {
+      await wipeLocalData(database);
+    } catch {
+      setError('Local data could not be deleted. Try again.');
+      setBusyAction(null);
+      return;
+    }
+    try {
+      await onDataChanged();
+    } catch {
+      setError(
+        'Local data was deleted, but the empty view is unavailable. Restart the app to continue.',
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const confirmWipe = () => {
+    Alert.alert(
+      'Delete all local ledger data?',
+      'This permanently removes transactions, classifications, subscriptions, rules, and demo records from this app. Export first if you need a copy.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete all local data',
+          style: 'destructive',
+          onPress: () => void runWipe(),
+        },
+      ],
+    );
+  };
+
+  const busy = busyAction !== null;
+  return (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      testID="settings-screen"
+    >
+      <Text style={[styles.demoPill, { color: palette.accent }]}>
+        SETTINGS · LOCAL DATA
+      </Text>
+      <Text
+        accessibilityRole="header"
+        style={[styles.screenTitle, { color: palette.text }]}
+      >
+        Privacy and local storage
+      </Text>
+      <Text style={[styles.bodyText, { color: palette.muted }]}>
+        This beta works from its app-private SQLite database and does not need a
+        network connection.
+      </Text>
+
+      <View
+        style={[
+          styles.settingsCard,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID="local-readiness"
+      >
+        <Text
+          accessibilityRole="header"
+          style={[styles.cardTitle, { color: palette.text }]}
+        >
+          Offline readiness
+        </Text>
+        {state.status === 'LOADING' ? (
+          <View
+            accessibilityLabel={asyncStateLabel('local readiness', 'LOADING')}
+            accessibilityLiveRegion="polite"
+            accessibilityState={{ busy: true }}
+            style={styles.inlineStatus}
+          >
+            <ActivityIndicator
+              accessibilityElementsHidden
+              color={palette.accent}
+            />
+            <Text style={[styles.bodyText, { color: palette.muted }]}>
+              Checking local storage…
+            </Text>
+          </View>
+        ) : state.status === 'ERROR' ? (
+          <View accessibilityRole="alert" style={styles.settingsSection}>
+            <Text style={[styles.bodyText, { color: palette.text }]}>
+              Local readiness could not be checked.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void refreshReadiness()}
+              style={styles.secondaryButton}
+              testID="settings-readiness-retry"
+            >
+              <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+                Try again
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View
+            accessible
+            accessibilityLabel={`Ready offline. Local SQLite storage. No network required. Schema version ${state.readiness.schemaVersion}. Integrity check passed. Last local data change: ${formatLocalDataChange(state.readiness.lastLocalDataChangeAt)}.`}
+            style={styles.settingsSection}
+          >
+            <Badge label="Ready offline" palette={palette} emphasized />
+            <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
+              Local SQLite · no network required
+            </Text>
+            <Text style={[styles.smallText, { color: palette.muted }]}>
+              Schema version {state.readiness.schemaVersion} · integrity check
+              passed
+            </Text>
+            <Text style={[styles.smallText, { color: palette.muted }]}>
+              Last local data change:{' '}
+              {formatLocalDataChange(state.readiness.lastLocalDataChangeAt)}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View
+        style={[
+          styles.settingsCard,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+      >
+        <Text
+          accessibilityRole="header"
+          style={[styles.cardTitle, { color: palette.text }]}
+        >
+          Export and restore
+        </Text>
+        <Text
+          accessibilityRole="alert"
+          style={[styles.bodyTextStrong, { color: palette.warning }]}
+        >
+          {PORTABLE_EXPORT_WARNING}
+        </Text>
+        <Text style={[styles.smallText, { color: palette.muted }]}>
+          Export opens the system share sheet. Restore accepts the JSON text
+          from a previous Vibe Ledger export and validates it before replacing
+          local data.
+        </Text>
+        <View style={styles.settingsActions}>
+          <Pressable
+            accessibilityLabel="Export local financial data"
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: busyAction === 'EXPORT',
+              disabled: busy,
+            }}
+            disabled={busy}
+            onPress={confirmExport}
+            style={[
+              styles.secondaryButton,
+              { backgroundColor: palette.accent },
+            ]}
+            testID="settings-export"
+          >
+            <Text
+              style={[styles.smallButtonText, { color: palette.accentText }]}
+            >
+              Export
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Restore local data from pasted export"
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: busyAction === 'RESTORE',
+              disabled: busy,
+            }}
+            disabled={busy}
+            onPress={() => {
+              setError(null);
+              setRestoreOpen(true);
+            }}
+            style={styles.secondaryButton}
+            testID="settings-restore"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              Restore
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View
+        style={[
+          styles.settingsCard,
+          { backgroundColor: palette.surface, borderColor: palette.breach },
+        ]}
+      >
+        <Text
+          accessibilityRole="header"
+          style={[styles.cardTitle, { color: palette.text }]}
+        >
+          Delete local data
+        </Text>
+        <Text style={[styles.bodyText, { color: palette.muted }]}>
+          Permanently remove the local ledger. Loading synthetic Demo Data
+          afterwards remains a separate, explicit action.
+        </Text>
+        <Pressable
+          accessibilityLabel="Delete all local ledger data"
+          accessibilityRole="button"
+          accessibilityState={{ busy: busyAction === 'WIPE', disabled: busy }}
+          disabled={busy}
+          onPress={confirmWipe}
+          style={[styles.secondaryButton, { borderColor: palette.breach }]}
+          testID="settings-wipe"
+        >
+          <Text style={[styles.smallButtonText, { color: palette.breach }]}>
+            Delete all local data
+          </Text>
+        </Pressable>
+      </View>
+
+      {message === null ? null : (
+        <Text accessibilityLiveRegion="polite" style={{ color: palette.text }}>
+          {message}
+        </Text>
+      )}
+      {error === null ? null : (
+        <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+          {error}
+        </Text>
+      )}
+
+      <Modal
+        animationType="none"
+        onRequestClose={() => setRestoreOpen(false)}
+        transparent
+        visible={restoreOpen}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            accessibilityViewIsModal
+            style={[
+              styles.modalCard,
+              { backgroundColor: palette.surface, borderColor: palette.border },
+            ]}
+          >
+            <Text
+              accessibilityRole="header"
+              style={[styles.cardTitle, { color: palette.text }]}
+            >
+              Paste local data export
+            </Text>
+            <Text style={[styles.bodyText, { color: palette.warning }]}>
+              {PORTABLE_EXPORT_WARNING}
+            </Text>
+            <TextInput
+              accessibilityLabel="Export JSON to restore"
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+              onChangeText={setRestoreText}
+              placeholder="Paste the complete exported JSON"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.restoreInput,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="settings-restore-input"
+              value={restoreText}
+            />
+            {error === null ? null : (
+              <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+                {error}
+              </Text>
+            )}
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setRestoreOpen(false)}
+                style={styles.secondaryButton}
+              >
+                <Text
+                  style={[styles.smallButtonText, { color: palette.muted }]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy: busyAction === 'RESTORE',
+                  disabled: busy,
+                }}
+                disabled={busy}
+                onPress={confirmRestore}
+                style={[styles.modalSave, { backgroundColor: palette.accent }]}
+                testID="settings-restore-confirm"
+              >
+                <Text
+                  style={[
+                    styles.smallButtonText,
+                    { color: palette.accentText },
+                  ]}
+                >
+                  Review restore
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <CoreNavigation
+        active="SETTINGS"
+        onBreakdown={onOpenBreakdown}
+        onHome={onHome}
+        onSettings={() => undefined}
+        onSubscriptions={onOpenSubscriptions}
+        onTrends={onOpenTrends}
+        palette={palette}
+      />
+    </ScrollView>
+  );
+}
+
 type TrendLoadState =
   | { readonly status: 'LOADING' }
   | { readonly status: 'ERROR' }
@@ -2331,6 +3022,7 @@ function MoneyMapScreen({
   onHome,
   onOpenTrends,
   onOpenSubscriptions,
+  onOpenSettings,
   palette,
 }: {
   readonly budget: NonNullable<LedgerSnapshot['ledgerMonth']>['budget'];
@@ -2348,6 +3040,7 @@ function MoneyMapScreen({
   readonly onHome: () => void;
   readonly onOpenTrends: () => void;
   readonly onOpenSubscriptions: () => void;
+  readonly onOpenSettings: () => void;
   readonly palette: Palette;
 }) {
   const [mode, setMode] = useState<MoneyMapMode>('PLAN');
@@ -2373,7 +3066,10 @@ function MoneyMapScreen({
           <Text style={[styles.demoPill, { color: palette.warning }]}>
             EXPERIMENTAL · NOT A PRIMARY DESTINATION
           </Text>
-          <Text style={[styles.screenTitle, { color: palette.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.screenTitle, { color: palette.text }]}
+          >
             Money Map
           </Text>
           <Text style={[styles.bodyText, { color: palette.muted }]}>
@@ -2388,6 +3084,7 @@ function MoneyMapScreen({
           <Pressable
             key={month}
             accessibilityRole="button"
+            accessibilityLabel={`Show ${formatTrendMonth(month)}`}
             accessibilityState={{ selected: month === activeMonth }}
             onPress={() => onSelectMonth(month)}
             style={[
@@ -2708,6 +3405,7 @@ function MoneyMapScreen({
         onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
         onHome={onHome}
         onSubscriptions={onOpenSubscriptions}
+        onSettings={onOpenSettings}
         onTrends={onOpenTrends}
         palette={palette}
       />
@@ -2722,6 +3420,7 @@ function TrendsScreen({
   onExplore,
   onHome,
   onOpenSubscriptions,
+  onOpenSettings,
   palette,
 }: {
   readonly activeMonth: string;
@@ -2730,6 +3429,7 @@ function TrendsScreen({
   readonly onExplore: (filter: LedgerQuery) => void;
   readonly onHome: () => void;
   readonly onOpenSubscriptions: () => void;
+  readonly onOpenSettings: () => void;
   readonly palette: Palette;
 }) {
   const [selection, setSelection] = useState<TrendSelection>({
@@ -2745,6 +3445,7 @@ function TrendsScreen({
   const [state, setState] = useState<TrendLoadState>({ status: 'LOADING' });
   const [categories, setCategories] = useState<readonly Category[]>([]);
   const [selectedBarId, setSelectedBarId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -2767,7 +3468,7 @@ function TrendsScreen({
     return () => {
       active = false;
     };
-  }, [currency, database, request]);
+  }, [currency, database, request, retryCount]);
 
   const applySelection = useCallback((nextSelection: TrendSelection) => {
     setSelection(nextSelection);
@@ -2797,7 +3498,12 @@ function TrendsScreen({
       <Text style={[styles.demoPill, { color: palette.accent }]}>
         TRENDS · CANONICAL LEDGER
       </Text>
-      <Text style={[styles.screenTitle, { color: palette.text }]}>Trends</Text>
+      <Text
+        accessibilityRole="header"
+        style={[styles.screenTitle, { color: palette.text }]}
+      >
+        Trends
+      </Text>
       <Text style={[styles.bodyText, { color: palette.muted }]}>
         Living and Fun show included spending. Saving shows contributions. Net
         savings movement remains separate.
@@ -2959,8 +3665,16 @@ function TrendsScreen({
       </View>
 
       {state.status === 'LOADING' ? (
-        <View style={styles.trendLoading}>
-          <ActivityIndicator color={palette.accent} />
+        <View
+          accessibilityLabel={asyncStateLabel('Trends', 'LOADING')}
+          accessibilityLiveRegion="polite"
+          accessibilityState={{ busy: true }}
+          style={styles.trendLoading}
+        >
+          <ActivityIndicator
+            accessibilityElementsHidden
+            color={palette.accent}
+          />
           <Text style={[styles.bodyText, { color: palette.muted }]}>
             Calculating local trends…
           </Text>
@@ -2976,6 +3690,19 @@ function TrendsScreen({
           <Text style={[styles.bodyText, { color: palette.text }]}>
             Trends could not be calculated from the local ledger.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setState({ status: 'LOADING' });
+              setRetryCount((count) => count + 1);
+            }}
+            style={styles.secondaryButton}
+            testID="trends-retry"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              Try again
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <TrendResults
@@ -2993,6 +3720,7 @@ function TrendsScreen({
         onHome={onHome}
         onTrends={() => undefined}
         onSubscriptions={onOpenSubscriptions}
+        onSettings={onOpenSettings}
         palette={palette}
       />
     </ScrollView>
@@ -3193,7 +3921,7 @@ function TrendBarColumn({
                 key={segment.id}
                 accessibilityRole="button"
                 accessibilityLabel={`${bar.month} ${segment.label}, ${compactMinor(segment.amountMinor, currency)}, ${segment.transactionCount} matching transactions. Open Breakdown.`}
-                hitSlop={8}
+                hitSlop={24}
                 onPress={() => {
                   onSelect();
                   onExplore(segment.drillDown);
@@ -3473,9 +4201,11 @@ function ExplorerScreen({
   onDataChanged,
   onOpenTrends,
   onOpenSubscriptions,
+  onOpenSettings,
   onBack,
 }: {
-  readonly backDestination: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP';
+  readonly backDestination:
+    'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' | 'SETTINGS';
   readonly database: Database;
   readonly palette: Palette;
   readonly filter: ExplorerFilter;
@@ -3487,6 +4217,7 @@ function ExplorerScreen({
   readonly onDataChanged: () => Promise<void>;
   readonly onOpenTrends: () => void;
   readonly onOpenSubscriptions: () => void;
+  readonly onOpenSettings: () => void;
   readonly onBack: () => void;
 }) {
   const [searchText, setSearchText] = useState('');
@@ -3573,7 +4304,9 @@ function ExplorerScreen({
               ? 'Subscriptions'
               : backDestination === 'MONEY_MAP'
                 ? 'Money Map'
-                : 'Home'
+                : backDestination === 'SETTINGS'
+                  ? 'Settings'
+                  : 'Home'
         }`}
         onPress={onBack}
         style={styles.backButton}
@@ -3587,13 +4320,18 @@ function ExplorerScreen({
               ? 'Subscriptions'
               : backDestination === 'MONEY_MAP'
                 ? 'Money Map'
-                : 'Home'}
+                : backDestination === 'SETTINGS'
+                  ? 'Settings'
+                  : 'Home'}
         </Text>
       </Pressable>
       <Text style={[styles.demoPill, { color: palette.accent }]}>
         BREAKDOWN · LOCAL CORRECTIONS
       </Text>
-      <Text style={[styles.screenTitle, { color: palette.text }]}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.screenTitle, { color: palette.text }]}
+      >
         {viewModel.title}
       </Text>
       <Text style={[styles.bodyText, { color: palette.muted }]}>
@@ -3602,6 +4340,7 @@ function ExplorerScreen({
       <View style={styles.searchRow}>
         <TextInput
           accessibilityLabel="Search local transactions"
+          accessibilityHint="Enter a merchant, category, date, or amount filter"
           onChangeText={setSearchText}
           onSubmitEditing={() => {
             try {
@@ -3632,6 +4371,7 @@ function ExplorerScreen({
         />
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Search transactions"
           onPress={() => {
             try {
               const parsed = parseLedgerSearch(
@@ -3740,6 +4480,11 @@ function ExplorerScreen({
             <View style={styles.superCategoryHeader}>
               <View style={styles.identityRow}>
                 <View
+                  accessible
+                  accessibilityLabel={asyncStateLabel(
+                    'matching transactions',
+                    'EMPTY',
+                  )}
                   style={[
                     styles.identityDot,
                     {
@@ -4005,6 +4750,7 @@ function ExplorerScreen({
         onBreakdown={() => undefined}
         onTrends={onOpenTrends}
         onSubscriptions={onOpenSubscriptions}
+        onSettings={onOpenSettings}
       />
     </ScrollView>
   );
@@ -4466,6 +5212,7 @@ function TransactionEditor({
         style={styles.modalScrollView}
       >
         <View
+          accessibilityViewIsModal
           style={[
             styles.modalCard,
             { backgroundColor: palette.surface, borderColor: palette.border },
@@ -4826,13 +5573,17 @@ function RuleEditor({
     <Modal animationType="none" onRequestClose={onCancel} transparent visible>
       <View style={styles.modalBackdrop}>
         <View
+          accessibilityViewIsModal
           style={[
             styles.modalCard,
             { backgroundColor: palette.surface, borderColor: palette.border },
           ]}
           testID="rule-editor"
         >
-          <Text style={[styles.cardTitle, { color: palette.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.cardTitle, { color: palette.text }]}
+          >
             Edit future rule
           </Text>
           <TextInput
@@ -4966,8 +5717,9 @@ function ChoiceButton({
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, selected }}
+      accessibilityLabel={`${label}${selected ? ', selected' : ''}`}
       onPress={onPress}
       style={[
         styles.choiceButton,
@@ -5012,14 +5764,28 @@ function comparatorSymbol(comparator: AmountComparator): string {
 function QueryStateScreen({
   palette,
   status,
+  onRetry,
 }: {
   readonly palette: Palette;
   readonly status: Exclude<QueryLoadState, { status: 'READY' }>['status'];
+  readonly onRetry: () => void;
 }) {
   return (
-    <View style={styles.centered}>
+    <View
+      accessibilityLabel={asyncStateLabel(
+        'Breakdown',
+        status === 'IDLE' ? 'LOADING' : status,
+      )}
+      accessibilityLiveRegion="polite"
+      accessibilityState={{ busy: status !== 'ERROR' }}
+      style={styles.centered}
+    >
       {status === 'LOADING' ? (
-        <ActivityIndicator color={palette.accent} size="large" />
+        <ActivityIndicator
+          accessibilityElementsHidden
+          color={palette.accent}
+          size="large"
+        />
       ) : null}
       <Text style={[styles.heroTitle, { color: palette.text }]}>
         {status === 'ERROR' ? 'Breakdown unavailable' : 'Loading Breakdown'}
@@ -5029,6 +5795,20 @@ function QueryStateScreen({
           ? 'The local query could not be completed.'
           : 'Applying structured local filters.'}
       </Text>
+      {status === 'ERROR' ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRetry}
+          style={[styles.primaryButton, { backgroundColor: palette.accent }]}
+          testID="breakdown-retry"
+        >
+          <Text
+            style={[styles.primaryButtonText, { color: palette.accentText }]}
+          >
+            Try again
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -5149,17 +5929,21 @@ function CoreNavigation({
   onBreakdown,
   onTrends,
   onSubscriptions,
+  onSettings,
 }: {
-  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS' | 'SUBSCRIPTIONS' | 'NONE';
+  readonly active:
+    'HOME' | 'BREAKDOWN' | 'TRENDS' | 'SUBSCRIPTIONS' | 'SETTINGS' | 'NONE';
   readonly palette: Palette;
   readonly onHome: () => void;
   readonly onBreakdown: () => void;
   readonly onTrends: () => void;
   readonly onSubscriptions: () => void;
+  readonly onSettings: () => void;
 }) {
   return (
     <View
       accessibilityLabel="Primary destinations"
+      accessibilityRole="tablist"
       style={[
         styles.coreNavigation,
         { backgroundColor: palette.surface, borderColor: palette.border },
@@ -5189,6 +5973,12 @@ function CoreNavigation({
         palette={palette}
         onPress={onSubscriptions}
       />
+      <Destination
+        label="Settings"
+        active={active === 'SETTINGS'}
+        palette={palette}
+        onPress={onSettings}
+      />
     </View>
   );
 }
@@ -5207,7 +5997,7 @@ function Destination({
   const available = onPress !== undefined;
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="tab"
       accessibilityLabel={
         available ? label : `${label}, planned for a later app layer`
       }
@@ -5244,22 +6034,55 @@ function StateScreen({
   title,
   body,
   loading = false,
+  onRetry,
 }: {
   readonly palette: Palette;
   readonly title: string;
   readonly body: string;
   readonly loading?: boolean;
+  readonly onRetry?: () => void;
 }) {
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: palette.background }]}
     >
-      <View style={styles.centered}>
+      <View
+        accessibilityLabel={asyncStateLabel(
+          'local ledger',
+          loading ? 'LOADING' : 'ERROR',
+        )}
+        accessibilityLiveRegion="polite"
+        accessibilityState={{ busy: loading }}
+        style={styles.centered}
+      >
         {loading ? (
-          <ActivityIndicator color={palette.accent} size="large" />
+          <ActivityIndicator
+            accessibilityElementsHidden
+            color={palette.accent}
+            size="large"
+          />
         ) : null}
-        <Text style={[styles.heroTitle, { color: palette.text }]}>{title}</Text>
+        <Text
+          accessibilityRole="header"
+          style={[styles.heroTitle, { color: palette.text }]}
+        >
+          {title}
+        </Text>
         <Text style={[styles.heroBody, { color: palette.muted }]}>{body}</Text>
+        {onRetry === undefined ? null : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRetry}
+            style={[styles.primaryButton, { backgroundColor: palette.accent }]}
+            testID="ledger-retry"
+          >
+            <Text
+              style={[styles.primaryButtonText, { color: palette.accentText }]}
+            >
+              Try again
+            </Text>
+          </Pressable>
+        )}
       </View>
       <StatusBar style={palette === DARK ? 'light' : 'dark'} />
     </SafeAreaView>
@@ -5459,6 +6282,7 @@ const styles = StyleSheet.create({
   smallText: { fontSize: 13, lineHeight: 18 },
   topRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
@@ -5472,6 +6296,7 @@ const styles = StyleSheet.create({
   textButtonLabel: { fontSize: 16, fontWeight: '700' },
   monthActionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
@@ -5512,7 +6337,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   allocationHeader: {
+    minHeight: 48,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     gap: 12,
@@ -5543,7 +6370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   allocationRow: {
-    minHeight: 42,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -5551,6 +6378,7 @@ const styles = StyleSheet.create({
   },
   identityRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
   },
@@ -5568,6 +6396,7 @@ const styles = StyleSheet.create({
   },
   cardTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
@@ -5591,7 +6420,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   runoverFill: { height: RUNOVER_ROW_HEIGHT - 3, borderRadius: 5 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between' },
+  cardFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
   sectionTitle: { marginTop: 12, fontSize: 20, fontWeight: '800' },
   activityList: {
     borderWidth: 1,
@@ -5611,9 +6445,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
     justifyContent: 'center',
   },
-  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   summaryMetric: {
     flex: 1,
+    minWidth: 140,
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
@@ -5635,6 +6470,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  settingsCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  settingsSection: { gap: 8, alignItems: 'flex-start' },
+  settingsActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  inlineStatus: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  restoreInput: {
+    minHeight: 180,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlignVertical: 'top',
   },
   ringContainer: {
     width: RING_SIZE,
@@ -5678,7 +6536,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontSize: 17,
   },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  modalActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
   modalSave: {
     minHeight: 48,
     minWidth: 90,
@@ -5688,6 +6551,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   heatMapPanel: { borderWidth: 1, borderRadius: 16, padding: 12, gap: 8 },
+  calendarContent: { minWidth: 350, flex: 1 },
   weekRow: { flexDirection: 'row' },
   weekLabel: {
     width: `${100 / 7}%`,
@@ -5698,16 +6562,17 @@ const styles = StyleSheet.create({
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calendarCell: {
     width: `${100 / 7}%`,
+    minHeight: 48,
     aspectRatio: 1,
     padding: 3,
-  },
-  calendarDay: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  calendarDay: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  calendarCue: { fontSize: 12, lineHeight: 14, fontWeight: '900' },
   heatLegend: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -5736,6 +6601,7 @@ const styles = StyleSheet.create({
   },
   superCategoryHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
@@ -5750,15 +6616,21 @@ const styles = StyleSheet.create({
   },
   breakdownHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
   },
   breakdownTitleBlock: { flex: 1, gap: 8 },
-  breakdownAmount: { alignItems: 'flex-end' },
+  breakdownAmount: { alignItems: 'flex-end', minWidth: 100 },
   categoryTrack: { height: 7, borderRadius: 4, overflow: 'hidden' },
   categoryFill: { height: 7, borderRadius: 4 },
-  treeTransaction: { borderTopWidth: 1, paddingTop: 10, gap: 5 },
+  treeTransaction: {
+    minHeight: 48,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    gap: 5,
+  },
   transactionText: { flex: 1 },
   transactionTitle: { flex: 1, fontSize: 16, fontWeight: '800' },
   transactionAmount: { fontSize: 17, fontWeight: '800' },
@@ -5771,7 +6643,12 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: '700' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  searchRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
+  searchRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    gap: 8,
+  },
   searchInput: {
     flex: 1,
     minHeight: 52,
@@ -5789,7 +6666,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   filterChip: {
-    minHeight: 32,
+    minHeight: 48,
     borderWidth: 1,
     borderRadius: 999,
     justifyContent: 'center',
@@ -5818,10 +6695,15 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   flexField: { flex: 1 },
-  inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  inputRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+  },
   choiceGroup: { gap: 7 },
   choiceButton: {
-    minHeight: 44,
+    minHeight: 48,
     borderWidth: 1,
     borderRadius: 999,
     justifyContent: 'center',
@@ -5848,12 +6730,13 @@ const styles = StyleSheet.create({
   ruleRow: {
     minHeight: 56,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
   },
   ruleMain: { flex: 1, minHeight: 48, justifyContent: 'center' },
   ruleToggle: {
-    minHeight: 44,
+    minHeight: 48,
     minWidth: 76,
     borderRadius: 999,
     alignItems: 'center',
@@ -5892,6 +6775,7 @@ const styles = StyleSheet.create({
   moneyMapBranchHeader: {
     minHeight: 56,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 12,
   },
@@ -5908,6 +6792,7 @@ const styles = StyleSheet.create({
   },
   moneyMapCategoryHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
@@ -5942,7 +6827,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trendChip: {
-    minHeight: 44,
+    minHeight: 48,
     minWidth: 58,
     borderWidth: 1,
     borderRadius: 999,
@@ -5957,7 +6842,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   monthInput: {
-    minHeight: 44,
+    minHeight: 48,
     width: 102,
     borderWidth: 1,
     borderRadius: 10,
@@ -5965,7 +6850,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   applyButton: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
@@ -6013,7 +6898,7 @@ const styles = StyleSheet.create({
   },
   trendBarValueButton: {
     width: 68,
-    minHeight: 44,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -6056,7 +6941,7 @@ const styles = StyleSheet.create({
     minHeight: 2,
   },
   trendBarLabelButton: {
-    minHeight: 44,
+    minHeight: 48,
     width: 68,
     alignItems: 'center',
     justifyContent: 'center',
@@ -6075,7 +6960,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   trendMonthButton: {
-    minHeight: 44,
+    minHeight: 48,
     minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
@@ -6107,9 +6992,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 6,
     flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   destination: {
     flex: 1,
+    minWidth: 72,
     minHeight: 54,
     borderRadius: 11,
     alignItems: 'center',

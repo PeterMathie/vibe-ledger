@@ -16,6 +16,56 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: mkdir -p .ci-artifacts
+      - run: npm ci 2>&1 | tee .ci-artifacts/npm-ci.log
+      - run: npm run test:ci 2>&1 | tee .ci-artifacts/tests.log
+      - run: npm run typecheck 2>&1 | tee .ci-artifacts/typecheck.log
+      - run: npm run lint 2>&1 | tee .ci-artifacts/lint.log
+      - run: npm run format:check 2>&1 | tee .ci-artifacts/format.log
+      - run: npm run doctor 2>&1 | tee .ci-artifacts/expo-doctor.log
+      - name: Upload quality failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-failure-${{ github.run_id }}
+          path: .ci-artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+  android-production-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: mkdir -p .ci-artifacts
+      - run: npm ci 2>&1 | tee .ci-artifacts/npm-ci.log
+      - run: npm run release:check 2>&1 | tee .ci-artifacts/release-check.log
+      - run: npm run export:android:production 2>&1 | tee .ci-artifacts/android-export.log
+      - run: npm run verify:android:production 2>&1 | tee .ci-artifacts/demo-gate.log
+      - name: Upload Android export failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-export-failure-${{ github.run_id }}
+          path: |
+            .ci-artifacts
+            dist/metadata.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  supply-chain:
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -23,5 +73,28 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run check
+      - run: mkdir -p .ci-artifacts
+      - run: npm ci 2>&1 | tee .ci-artifacts/npm-ci.log
+      - run: npm run licenses:check 2>&1 | tee .ci-artifacts/licenses.log
+      - run: npm run security:check 2>&1 | tee .ci-artifacts/audit.log
+      - name: Upload supply-chain failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: supply-chain-failure-${{ github.run_id }}
+          path: .ci-artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/dependency-review-action@595b5aeba73380359d98a5e087f648dbb0edce1b # v4.7.3
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-1.0-only, AGPL-3.0-only, SSPL-1.0

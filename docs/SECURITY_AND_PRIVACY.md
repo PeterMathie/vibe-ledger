@@ -25,21 +25,44 @@ unrelated local records.
 - **OS/app sandbox:** app-private SQLite blocks ordinary cross-app access, but it
   does not protect an unlocked, rooted/jailbroken, compromised, or debug-enabled
   device. The app must not claim otherwise.
-- **Device backups:** platform backup settings can copy app-private files.
-  Before personal data ships, backup inclusion/exclusion and restore behaviour
-  must be explicitly configured and tested per platform.
-- **Screenshots and recents:** financial screens can be captured by users, OS
-  recents previews, accessibility services, and device management software.
-  Sensitive-screen protection and its usability trade-offs require a UI-stage
-  decision; synthetic screens need no such restriction.
+- **Device backups:** Android backup is explicitly disabled with
+  `android.allowBackup=false`, so app-private financial data is not intentionally
+  copied into Android cloud/device backups. Every release validates this on a
+  physical-device fresh-install/restore path. No equivalent iOS exclusion is
+  configured or verified. iOS backups may therefore include the app database
+  according to platform and user settings. This blocks an iOS release that
+  handles personal financial data until exclusion and restore behaviour are
+  implemented, documented, and tested; it does not block the synthetic/offline
+  Android beta.
+- **Screenshots and recents:** the app applies `expo-screen-capture` protection
+  globally to its financial surface. It blocks standard screenshots and screen
+  recording and protects Android recent-app previews. On iOS, the current API
+  does not provide an app-switcher privacy overlay, so the OS may still display
+  its snapshot; a separate lifecycle-driven privacy view is required before
+  claiming iOS app-switcher protection. Capture prevention reduces ordinary
+  user control and can impede accessibility, support, casting, and assistive
+  workflows. It also cannot protect against another camera, privileged
+  accessibility/device management software, or a compromised device. These
+  limitations and trade-offs are disclosed in `PRIVACY.md`.
 - **Logs and diagnostics:** logs can escape the sandbox through development
   tools, crash services, or support bundles. Transaction descriptions, raw
   payloads, account identifiers, amounts, tokens, and database rows are never
   log fields.
-- **Exports:** exports deliberately leave the sandbox. Future export/restore
-  requires explicit confirmation, a versioned allow-listed schema, integrity
-  validation, atomic restore, clear destination warning, and no credentials or
-  opaque raw table dump.
+- **Exports:** portable exports deliberately leave the sandbox and contain
+  sensitive financial data, including allow-listed transaction fields,
+  descriptions, amounts, classifications, rules, budgets, and subscriptions.
+  The export carries an explicit warning and a versioned, exact allow-list. It
+  excludes credential-like fields, tokens, non-synthetic source rows, and
+  opaque raw payloads such as `raw_payload_json`; restore writes an empty
+  payload rather than
+  accepting one from the file. Exports are not app-encrypted, so the user must
+  protect every saved or shared copy.
+- **Restore and wipe:** restore validates the complete schema, fields, value
+  types, currencies, timestamps, and embedded audit JSON before replacing
+  data. Replacement runs in one database transaction and rolls back on any
+  insertion or relational failure. Full wipe transactionally deletes local
+  user/transaction records and resets built-in category metadata. It cannot
+  revoke or erase export files already outside the sandbox.
 - **Encryption and keys:** app-private storage is not equivalent to
   application-level encryption. Before personal data ships, document whether
   platform file encryption is sufficient. If database encryption is adopted,
@@ -68,3 +91,20 @@ The strict-local-first integration decision is in
 must never enter SQLite, logs, fixtures, source, screenshots, exports, or crash
 reports. Any future broker requires a separate threat model and ADR before code
 or deployment.
+
+## Release data boundary
+
+Production builds set `EXPO_PUBLIC_DEMO_MODE=false`. Metro substitutes an empty
+fixture module, and CI scans the production Android export for known fixture
+payload markers. Preview/development builds opt in explicitly and remain
+synthetic-only. This prevents a production action from inserting committed demo
+transactions while preserving a one-command developer demo.
+
+The Android package ID is stable so signed updates preserve the app sandbox.
+OTA updates are disabled; every update goes through the signed artifact and
+migration retention plan in `RELEASE.md`.
+
+Release checks must exercise export validation, atomic rollback, full wipe, and
+post-wipe restart. Device testing must also verify the configured Android backup
+exclusion. iOS personal-data distribution remains blocked by the unresolved
+backup exclusion described above.

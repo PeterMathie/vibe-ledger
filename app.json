@@ -5,12 +5,17 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "updates": {
+      "enabled": false
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.vibeledger"
     },
     "android": {
       "package": "app.vibeledger",
+      "versionCode": 1,
+      "allowBackup": false,
       "predictiveBackGestureEnabled": true
     },
     "plugins": ["expo-sqlite"]

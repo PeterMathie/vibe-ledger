@@ -77,6 +77,11 @@ Security/privacy controls and third-party policy are maintained separately in
 character and UI hierarchy are captured in
 [`docs/VISUAL_DIRECTION.md`](docs/VISUAL_DIRECTION.md).
 
+Android beta builds follow the explicit checklist in
+[`docs/RELEASE.md`](docs/RELEASE.md). The public
+[`PRIVACY.md`](PRIVACY.md), [`SECURITY.md`](SECURITY.md), and
+[`LICENSE`](LICENSE) apply to distributed builds and this repository.
+
 ## Non-negotiable product principles
 
 - A bank debit is **not automatically spending**.

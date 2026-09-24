@@ -70,6 +70,43 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
     ]);
   });
 
+  it('retains representative data while upgrading an existing database', async () => {
+    for (const migration of MIGRATIONS.slice(0, 3)) {
+      await database.execAsync(migration.sql);
+      await database.execAsync(`PRAGMA user_version = ${migration.version};`);
+    }
+    await database.runAsync(
+      `INSERT INTO raw_transactions (
+        id, source, source_transaction_id, amount_minor, currency, description,
+        created_at, raw_payload_json, first_seen_at, last_synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      'upgrade:retained',
+      'fixture',
+      'upgrade-retained',
+      -420,
+      'GBP',
+      'SYNTHETIC RETAINED RECORD',
+      '2026-09-01T00:00:00.000Z',
+      '{}',
+      '2026-09-01T00:00:00.000Z',
+      '2026-09-01T00:00:00.000Z',
+    );
+
+    await migrateDatabase(database);
+
+    expect(
+      await database.getFirstAsync<{ description: string }>(
+        `SELECT description FROM raw_transactions
+         WHERE id = 'upgrade:retained';`,
+      ),
+    ).toEqual({ description: 'SYNTHETIC RETAINED RECORD' });
+    expect(
+      await database.getFirstAsync<{ user_version: number }>(
+        'PRAGMA user_version;',
+      ),
+    ).toEqual({ user_version: 4 });
+  });
+
   it('enforces unique source transaction identity', async () => {
     await migrateDatabase(database);
     await database.runAsync(

@@ -5,8 +5,7 @@
 This foundation and first interactive layer implement the Phase 0 semantic
 engine and fixture-backed Home/Explorer experience for the Expo app, targeting
 Android and iOS from one TypeScript codebase. They deliberately do not implement
-Monzo OAuth, live sync, Money Map, export/wipe, release signing, or a sync
-broker.
+Monzo OAuth, live sync, export/wipe, or a sync broker.
 
 ## Document ownership
 
@@ -140,6 +139,23 @@ credentials, tokens, or a real account. No application network/auth path exists
 in Phase 0. Personal-data import belongs exclusively to the later Monzo
 milestone and must remain behind the source-adapter boundary.
 
+## Release quality gates
+
+CI enforces a minimum test count, configuration consistency, production
+Android export, removal of the synthetic fixture payload, runtime dependency
+audit, and license policy. Failed jobs retain command logs and the structured
+Vitest report for 14 days. Actions use immutable commit SHAs.
+
+Production Metro resolution replaces the fixture module with empty arrays when
+`EXPO_PUBLIC_DEMO_MODE=false`; the production EAS profile sets that value
+explicitly. Developer and preview builds retain easy, explicit synthetic demo
+access. The exported bundle is scanned for fixture markers before release.
+
+Android uses the stable `app.vibeledger` application ID, repository-controlled
+version/versionCode, disabled OTA updates, and `allowBackup=false`. Signing,
+fresh-install, retained-data upgrade checks, and local/EAS build commands are
+documented in `RELEASE.md`.
+
 ## Deferred quality gates
 
 These are requirements for their owning backlog stages, not Phase 0 features:
@@ -150,8 +166,6 @@ These are requirements for their owning backlog stages, not Phase 0 features:
 - device end-to-end tests must cover fresh install, upgrade retention, fixture
   import, reclassification, offline restart, export/restore, and wipe as those
   owning features ship;
-- release builds require persistent signing identity and reproducible build
-  instructions; signing secrets never enter the repository;
 - every migration series must prove both fresh-install and retained-data upgrade
   paths before release.
 
