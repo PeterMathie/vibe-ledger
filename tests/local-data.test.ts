@@ -175,7 +175,7 @@ describe('BL-041 offline local readiness', () => {
       await expect(getLocalReadiness(database)).resolves.toEqual({
         storage: 'LOCAL_SQLITE',
         networkRequired: false,
-        schemaVersion: 4,
+        schemaVersion: 5,
         integrity: 'OK',
         lastLocalDataChangeAt: '2026-09-24T12:00:00.000Z',
       });

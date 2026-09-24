@@ -1,156 +1,72 @@
-# Monzo Integration
+# Monzo integration
 
-Verified against Monzo's public documentation on 24 September 2026.
+Verified against Monzo's public documentation on 24 September 2026. The pinned
+source links and architectural decision are recorded in
+[`adr/0001-strict-local-monzo.md`](adr/0001-strict-local-monzo.md).
 
-Primary reference:
-- https://docs.monzo.com/
+## Implemented mock-safe foundation
 
-Open Banking reference:
-- https://docs.monzo.com/open-banking/
+- TypeScript DTOs for accounts, transactions, merchants, and pots.
+- Runtime validation and mapping into source records with signed integer minor
+  units, original currency, stable source/account IDs, settlement and deletion
+  state.
+- An allow-listed raw payload snapshot. Unknown fields, metadata, notes,
+  merchant addresses, credentials, and headers are not persisted.
+- Separate source-account, source-pot, and sync-state tables. None are domain
+  classifications.
+- Idempotent transaction upsert by source identity, durable incremental
+  timestamp cursor with a seven-day overlap, atomic batch writes, and
+  full/partial-history status.
+- A secure-token-store abstraction, Expo SecureStore implementation, and
+  in-memory test implementation. No token is needed for mock sync.
+- Redirect/state/PKCE validators and token redaction helpers. They are security
+  primitives, not an enabled OAuth flow.
+- Bounded timeout/retry/cancellation policy for a future client. There is no
+  production network implementation and no background sync.
+- Settings always defaults to `Demo · Not connected`. Development builds expose
+  an explicit synthetic mock-sync button; production builds do not.
 
-## 1. What the Developer API provides
+The mock uses synthetic Monzo-shaped values only. It exercises adapter and sync
+behavior without contacting Monzo.
 
-Monzo documents:
+## Current Monzo facts that affect the design
 
-- OAuth 2.0 authentication;
-- accounts;
-- transactions;
-- merchant/category information;
-- pots;
-- webhooks;
-- transaction metadata.
+Monzo documents OAuth 2.0, accounts, signed minor-unit transactions, pots,
+pagination, errors, and webhooks. The constraints that matter here are:
 
-The Developer API is explicitly described as suitable for the developer's own account or a small explicitly allowed set of users, not a public application.
+- non-confidential clients do not receive refresh tokens;
+- public clients must re-authenticate after access-token expiry;
+- the documented authorization-code exchange requires a client secret;
+- redirect `state` mismatch must abort;
+- the docs do not describe PKCE;
+- full transaction history can be fetched immediately after authentication;
+- after five minutes, transaction sync is limited to the previous 90 days;
+- transaction pagination supports timestamp or object-ID cursors with a maximum
+  page size of 100;
+- `429` is documented, but no fixed quota is promised;
+- webhooks require a reachable URL and are retried up to five times.
 
-That matches the initial personal beta.
+The docs show a `deleted` flag for pots. They do not currently document a
+deleted-transaction list field. The adapter can preserve a transaction deletion
+tombstone if Monzo supplies one, but a future network client must verify the
+actual contract before requesting or relying on deleted transactions.
 
----
+## Semantic boundary
 
-## 2. Important authentication constraint
+Monzo source categories and pot names are import hints only. A £200 transfer to
+a pot and a £200 transfer to an external savings provider can have equivalent
+budget meaning only after the deterministic classification layer says so.
+Neither adapter mapping nor sync assigns an event type, budget scope, category,
+or saving contribution.
 
-Monzo distinguishes confidential and non-confidential OAuth clients.
+## Real connection remains disabled
 
-Their documentation states that **non-confidential clients are not issued refresh tokens**.
+Do not add a client secret, playground token, personal payload, live redirect,
+or real OAuth test to this repository. A native live flow stays disabled until
+Monzo documents a secret-free native exchange (including PKCE) or the minimal
+broker in the ADR is separately approved, built, and operated.
 
-A native phone app cannot safely keep a client secret in the same way a server can, so a strict "phone only, absolutely no backend" architecture conflicts with seamless long-lived OAuth refresh.
-
-This is currently the largest implementation uncertainty.
-
-Do not hide it.
-
----
-
-## 3. Recommended beta integration choices
-
-### Option A — strict local-only prototype
-
-- authenticate as allowed by Monzo;
-- sync on demand / app foreground;
-- accept re-authentication limitations;
-- no webhooks;
-- all analytics and persistent transaction interpretation remain local.
-
-Pros:
-- closest to desired privacy model.
-
-Cons:
-- auth friction may be unacceptable;
-- background sync is limited.
-
-### Option B — thin personal sync broker (recommended if necessary)
-
-A minimal service does only:
-- confidential OAuth secret handling;
-- refresh-token handling;
-- optional webhook endpoint;
-- secure transaction sync handoff.
-
-The phone still owns:
-- budgeting rules;
-- categories;
-- classifications;
-- history database where feasible;
-- analytics;
-- charts;
-- subscription metadata.
-
-The service must not contain AI or analytics.
-
-Pros:
-- reliable authentication and event sync.
-
-Cons:
-- not strictly phone-only;
-- requires hosting and security work.
-
-### Option C — future public product
-
-Use regulated Open Banking access directly or through an appropriate provider.
-
-Out of beta scope.
-
----
-
-## 4. Initial history import
-
-Monzo documentation states that immediately after authentication the client can fetch full transaction history; after 5 minutes, transaction syncing is restricted to the previous 90 days.
-
-Implementation requirement:
-- perform initial history import immediately after successful authentication;
-- persist source transaction IDs locally;
-- mark `initial_history_complete`;
-- subsequent syncs use incremental windows and upsert by source transaction ID.
-
----
-
-## 5. Raw-data rule
-
-Do not design budget semantics around Monzo's consumer-app presentation.
-
-The adapter should ingest the most useful raw API fields and map them into `raw_transactions`.
-
-Then Vibe Ledger classifies those records independently.
-
-This is the entire reason the application can treat:
-
-```text
-Monzo → pot £200
-Monzo → Moneybox £200
-```
-
-as equivalent saving contributions even if Monzo presents them differently.
-
----
-
-## 6. Pot handling
-
-Monzo exposes a pots endpoint and pot balances.
-
-Where a reliable pot-related event can be identified:
-- preserve pot identity/name as source metadata;
-- apply a user-configurable classification rule.
-
-Do not assume every transfer-like API event is automatically a saving contribution. Some pots may be spending buffers.
-
----
-
-## 7. Webhooks
-
-Monzo webhooks require a reachable URL.
-
-Therefore:
-- they are incompatible with a purely offline/local phone app without a service;
-- do not make webhook delivery mandatory for beta;
-- app must support pull/incremental sync;
-- a thin broker may add webhooks later.
-
----
-
-## 8. Security
-
-- never store Monzo login credentials;
-- OAuth tokens must use platform secure storage;
-- never commit client secrets;
-- keep raw transaction payloads out of logs in production builds;
-- provide a local data wipe;
-- if a broker exists, minimise retained data and document it.
+The user must also accept one of two UX outcomes: repeated foreground
+reauthorization with no automatic freshness, or the privacy/security
+responsibilities of a confidential broker. Neither decision is made by this
+spike.

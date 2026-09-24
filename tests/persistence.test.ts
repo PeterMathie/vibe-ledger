@@ -19,12 +19,13 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
   });
 
   it('keeps migration versions contiguous and names stable', () => {
-    expect(MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4]);
+    expect(MIGRATIONS.map(({ version }) => version)).toEqual([1, 2, 3, 4, 5]);
     expect(MIGRATIONS.map(({ name }) => name)).toEqual([
       'phase-zero-foundation',
       'demo-dataset-ownership',
       'classification-corrections',
       'subscriptions',
+      'monzo-local-sync-foundation',
     ]);
   });
 
@@ -35,7 +36,7 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
     const version = await database.getFirstAsync<{ user_version: number }>(
       'PRAGMA user_version;',
     );
-    expect(version?.user_version).toBe(4);
+    expect(version?.user_version).toBe(5);
 
     const tables = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master
@@ -50,6 +51,9 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
       'demo_dataset_state',
       'income_adjustments',
       'monthly_budgets',
+      'monzo_source_accounts',
+      'monzo_source_pots',
+      'monzo_sync_state',
       'raw_transactions',
       'subscription_detection_denials',
       'subscription_reserve_plans',
@@ -104,7 +108,7 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
       await database.getFirstAsync<{ user_version: number }>(
         'PRAGMA user_version;',
       ),
-    ).toEqual({ user_version: 4 });
+    ).toEqual({ user_version: 5 });
   });
 
   it('enforces unique source transaction identity', async () => {

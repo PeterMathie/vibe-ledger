@@ -291,6 +291,11 @@ export async function restoreLocalData(
   await database.execAsync('BEGIN IMMEDIATE;');
   try {
     await deletePortableData(database);
+    await database.execAsync(`
+      DELETE FROM monzo_sync_state;
+      DELETE FROM monzo_source_pots;
+      DELETE FROM monzo_source_accounts;
+    `);
     for (const table of INSERT_ORDER) {
       for (const row of portable.data[table]) {
         await insertRow(database, table, row);
@@ -306,6 +311,11 @@ export async function restoreLocalData(
 export async function wipeLocalData(database: Database): Promise<void> {
   await database.execAsync('BEGIN IMMEDIATE;');
   try {
+    await database.execAsync(`
+      DELETE FROM monzo_sync_state;
+      DELETE FROM monzo_source_pots;
+      DELETE FROM monzo_source_accounts;
+    `);
     for (const table of DELETE_ORDER) {
       if (table !== 'categories' && table !== 'super_categories') {
         await database.execAsync(`DELETE FROM ${table};`);

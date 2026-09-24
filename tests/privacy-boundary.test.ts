@@ -30,11 +30,24 @@ describe('local beta privacy boundary', () => {
       expect.arrayContaining([
         'axios',
         'expo-auth-session',
-        'expo-secure-store',
         '@sentry/react-native',
         '@react-native-firebase/analytics',
       ]),
     );
+  });
+
+  it('permits only platform secure storage for the disabled Monzo token boundary', () => {
+    const packageJson = JSON.parse(
+      readFileSync('package.json', 'utf8'),
+    ) as Record<string, Record<string, string>>;
+    const secureStore = readFileSync(
+      'src/integrations/monzo/secure-store.ts',
+      'utf8',
+    );
+
+    expect(packageJson.dependencies?.['expo-secure-store']).toBeDefined();
+    expect(secureStore).toContain('WHEN_UNLOCKED_THIS_DEVICE_ONLY');
+    expect(secureStore).not.toMatch(/\bconsole\./);
   });
 });
 

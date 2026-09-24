@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -36,5 +38,14 @@ describe('Settings local-data helpers', () => {
     expect(formatLocalDataChange('2026-09-24T18:00:00.000Z')).not.toContain(
       'Invalid',
     );
+  });
+
+  it('keeps the Monzo Settings surface explicitly disconnected and manual', () => {
+    const app = readFileSync('App.tsx', 'utf8');
+
+    expect(app).toContain('Demo · Not connected');
+    expect(app).toContain('never connects');
+    expect(app).toContain('Run mock sync');
+    expect(app).not.toContain('setInterval(');
   });
 });

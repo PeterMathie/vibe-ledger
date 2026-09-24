@@ -266,6 +266,50 @@ export const MIGRATIONS: readonly Migration[] = [
         ON subscription_transactions(raw_transaction_id);
     `,
   },
+  {
+    version: 5,
+    name: 'monzo-local-sync-foundation',
+    sql: `
+      CREATE TABLE monzo_source_accounts (
+        id TEXT PRIMARY KEY NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        account_type TEXT,
+        closed INTEGER NOT NULL DEFAULT 0 CHECK (closed IN (0, 1)),
+        last_synced_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monzo_source_pots (
+        id TEXT PRIMARY KEY NOT NULL,
+        account_id TEXT NOT NULL REFERENCES monzo_source_accounts(id),
+        name TEXT NOT NULL,
+        balance_minor INTEGER NOT NULL,
+        currency TEXT NOT NULL CHECK (length(currency) = 3),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+        last_synced_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monzo_sync_state (
+        account_id TEXT PRIMARY KEY NOT NULL REFERENCES monzo_source_accounts(id),
+        phase TEXT NOT NULL CHECK (phase IN (
+          'NOT_STARTED', 'INITIAL_REQUIRED', 'SYNCING_INITIAL', 'READY',
+          'SYNCING_INCREMENTAL', 'PARTIAL_HISTORY', 'RATE_LIMITED', 'OFFLINE',
+          'CANCELLED', 'ERROR'
+        )),
+        cursor_created_at TEXT,
+        cursor_transaction_id TEXT,
+        initial_history_complete INTEGER NOT NULL DEFAULT 0
+          CHECK (initial_history_complete IN (0, 1)),
+        last_started_at TEXT,
+        last_completed_at TEXT,
+        error_code TEXT
+      );
+
+      CREATE INDEX monzo_pots_account ON monzo_source_pots(account_id);
+    `,
+  },
 ];
 
 export async function migrateDatabase(database: Database): Promise<void> {

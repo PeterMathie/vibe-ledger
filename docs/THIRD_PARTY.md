@@ -5,6 +5,14 @@ ranges stay compatible with the selected Expo SDK.
 
 ## Runtime dependencies
 
+### `expo-secure-store`
+
+`expo-secure-store` is the only permitted persistence mechanism for a future
+Monzo OAuth token. The adapter requests device-only, unlocked keychain
+accessibility. It does not provide networking, receive transaction payloads, or
+make live authorization available. Development and automated tests use an
+in-memory implementation containing synthetic token strings only.
+
 | Package                          | Purpose                                        | Data boundary                   |
 | -------------------------------- | ---------------------------------------------- | ------------------------------- |
 | `expo`                           | Cross-platform application runtime and tooling | Composition layer only          |

@@ -44,8 +44,12 @@ describe('release configuration', () => {
 
     expect(metro).toContain("process.env.EXPO_PUBLIC_DEMO_MODE !== 'false'");
     expect(metro).toContain('disabled-demo-fixtures.ts');
+    expect(metro).toContain('disabled-monzo-mock.ts');
     expect(disabledFixtures).not.toContain('AUGUST SYNTHETIC PAY');
     expect(disabledFixtures).toContain('DEMO_TRANSACTIONS = []');
+    expect(readFileSync('config/disabled-monzo-mock.ts', 'utf8')).not.toContain(
+      'SYNTHETIC SALARY',
+    );
   });
 
   it('keeps restore reachable while hiding demo loading in production', () => {

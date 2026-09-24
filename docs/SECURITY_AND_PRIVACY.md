@@ -5,10 +5,10 @@ change the product or money model.
 
 ## Current data boundary
 
-Phase 0 contains synthetic local fixtures only. Development builds, CI,
-emulators, screenshots, and demos must never use personal bank data, Monzo,
-OAuth, credentials, or tokens. There is no live network/auth path in the current
-application.
+The beta contains synthetic local fixtures and a synthetic Monzo-shaped mock
+adapter only. Development builds, CI, emulators, screenshots, and demos must
+never use personal bank data, OAuth credentials, or real tokens. There is no
+live network/auth path in the current application.
 
 Future source adapters may write immutable raw records through the persistence
 boundary. They may not bypass classification or place source-specific shapes in
@@ -87,10 +87,21 @@ state and never prints or serializes the exception.
 ## Future Monzo boundary
 
 The strict-local-first integration decision is in
-`adr/0001-strict-local-monzo.md`. Tokens must use platform secure storage and
-must never enter SQLite, logs, fixtures, source, screenshots, exports, or crash
-reports. Any future broker requires a separate threat model and ADR before code
-or deployment.
+`adr/0001-strict-local-monzo.md`. The mock-safe foundation stores no token. Its
+production token-store adapter uses platform secure storage with device-only,
+unlocked accessibility and fails closed when secure storage is unavailable.
+Tokens must never enter SQLite, logs, fixtures, source, screenshots, exports,
+or crash reports. Live authorization and networking remain disabled because
+Monzo's documented native authorization contract does not provide a safe
+secret-free, refreshable flow. Any future broker requires a separate ADR,
+threat-model review, and deployment approval.
+
+Monzo raw snapshots are constructed from an explicit allow-list and exclude
+unknown response fields, metadata, notes, merchant addresses, HTTP headers, and
+credentials. Sync is foreground/manual, cancellable, bounded, and atomic. No
+transaction payload is logged. Full wipe removes secure token material before
+Monzo sync/source state and raw rows; a secure-store failure is surfaced rather
+than reported as success.
 
 ## Release data boundary
 

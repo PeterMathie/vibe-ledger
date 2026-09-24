@@ -461,7 +461,7 @@ describe('subscription migration and restart persistence', () => {
         await database.getFirstAsync<{ user_version: number }>(
           'PRAGMA user_version;',
         ),
-      ).toEqual({ user_version: 4 });
+      ).toEqual({ user_version: 5 });
     } finally {
       database.close();
     }

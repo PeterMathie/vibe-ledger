@@ -28,6 +28,9 @@ const forbiddenMarkers = [
   'AUGUST SYNTHETIC PAY',
   'demo-subscription:studio-annual',
   'Included synthetic spend that demonstrates proportional runover.',
+  'SYNTHETIC SALARY',
+  'SYNTHETIC COFFEE',
+  'Synthetic house saving',
 ];
 
 for (const bundle of bundles) {

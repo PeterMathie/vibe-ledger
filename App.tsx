@@ -26,8 +26,10 @@ import {
 } from './src/app/accessibility';
 import {
   formatLocalDataChange,
+  getMonzoConnectionSummary,
   parseRestoreText,
   serializePortableExport,
+  type MonzoConnectionSummary,
 } from './src/app/settings';
 import {
   createRunoverModel,
@@ -130,6 +132,9 @@ import type {
   ClassifiedTransaction,
   RenewalIntent,
 } from './src/domain/types';
+import { MockMonzoApi } from './src/integrations/monzo/mock';
+import { ExpoSecureTokenStore } from './src/integrations/monzo/secure-store';
+import { syncMonzo, wipeMonzoConnection } from './src/integrations/monzo/sync';
 
 type LoadState =
   | { readonly status: 'LOADING' }
@@ -2557,6 +2562,13 @@ type SettingsLoadState =
   | { readonly status: 'ERROR' }
   | { readonly status: 'READY'; readonly readiness: LocalReadiness };
 
+const DEFAULT_MONZO_SUMMARY: MonzoConnectionSummary = {
+  authState: 'DEMO_NOT_CONNECTED',
+  networkEnabled: false,
+  mockLastSyncedAt: null,
+  mockHistory: 'NONE',
+};
+
 function SettingsScreen({
   database,
   onDataChanged,
@@ -2578,8 +2590,11 @@ function SettingsScreen({
     status: 'LOADING',
   });
   const [busyAction, setBusyAction] = useState<
-    'EXPORT' | 'RESTORE' | 'WIPE' | null
+    'EXPORT' | 'RESTORE' | 'WIPE' | 'MOCK_SYNC' | null
   >(null);
+  const [monzoSummary, setMonzoSummary] = useState<MonzoConnectionSummary>(
+    DEFAULT_MONZO_SUMMARY,
+  );
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [restoreText, setRestoreText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -2603,6 +2618,44 @@ function SettingsScreen({
       () => setState({ status: 'ERROR' }),
     );
   }, [database]);
+
+  useEffect(() => {
+    void getMonzoConnectionSummary(database).then(setMonzoSummary, () =>
+      setMonzoSummary(DEFAULT_MONZO_SUMMARY),
+    );
+  }, [database]);
+
+  const runMockSync = useCallback(async () => {
+    const now = new Date().toISOString();
+    setBusyAction('MOCK_SYNC');
+    setError(null);
+    setMessage(null);
+    let result;
+    try {
+      result = await syncMonzo(database, new MockMonzoApi(), {
+        source: 'monzo_mock',
+        authenticatedAt: now,
+        now,
+      });
+    } catch {
+      setError('Mock sync failed. No partial sync was saved.');
+      setBusyAction(null);
+      return;
+    }
+    try {
+      setMonzoSummary(await getMonzoConnectionSummary(database));
+      await onDataChanged();
+      setMessage(
+        `Synthetic Monzo-shaped data synced locally (${result.mode.toLowerCase()}).`,
+      );
+    } catch {
+      setError(
+        'Mock sync completed, but the refreshed view is unavailable. Restart the app to continue.',
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }, [database, onDataChanged]);
 
   const shareExport = useCallback(async () => {
     setBusyAction('EXPORT');
@@ -2646,6 +2699,7 @@ function SettingsScreen({
     try {
       await onDataChanged();
       await refreshReadiness();
+      setMonzoSummary(await getMonzoConnectionSummary(database));
       setRestoreOpen(false);
       setRestoreText('');
       setMessage('Local data restored.');
@@ -2685,6 +2739,7 @@ function SettingsScreen({
     setError(null);
     setMessage(null);
     try {
+      await wipeMonzoConnection(database, new ExpoSecureTokenStore());
       await wipeLocalData(database);
     } catch {
       setError('Local data could not be deleted. Try again.');
@@ -2693,6 +2748,7 @@ function SettingsScreen({
     }
     try {
       await onDataChanged();
+      setMonzoSummary(DEFAULT_MONZO_SUMMARY);
     } catch {
       setError(
         'Local data was deleted, but the empty view is unavailable. Restart the app to continue.',
@@ -2736,6 +2792,51 @@ function SettingsScreen({
         This beta works from its app-private SQLite database and does not need a
         network connection.
       </Text>
+
+      <View
+        style={[
+          styles.settingsCard,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID="monzo-connection"
+      >
+        <Text
+          accessibilityRole="header"
+          style={[styles.cardTitle, { color: palette.text }]}
+        >
+          Monzo connection
+        </Text>
+        <Badge label="Demo · Not connected" palette={palette} emphasized />
+        <Text style={[styles.bodyText, { color: palette.muted }]}>
+          Live Monzo authorization is disabled. This app never connects
+          automatically or syncs in the background.
+        </Text>
+        <Text style={[styles.smallText, { color: palette.muted }]}>
+          {monzoSummary.mockLastSyncedAt === null
+            ? 'No mock sync has run.'
+            : `Last mock sync: ${formatLocalDataChange(monzoSummary.mockLastSyncedAt)} · ${monzoSummary.mockHistory.toLowerCase()} history`}
+        </Text>
+        {DEMO_MODE_ENABLED ? (
+          <Pressable
+            accessibilityLabel="Run synthetic Monzo mock sync"
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: busyAction === 'MOCK_SYNC',
+              disabled: busy,
+            }}
+            disabled={busy}
+            onPress={() => void runMockSync()}
+            style={styles.secondaryButton}
+            testID="settings-monzo-mock-sync"
+          >
+            <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+              {busyAction === 'MOCK_SYNC'
+                ? 'Syncing mock data…'
+                : 'Run mock sync'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <View
         style={[

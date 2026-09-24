@@ -9,6 +9,16 @@ if (!demoMode) {
 
   config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (
+      moduleName === './src/integrations/monzo/mock' &&
+      context.originModulePath === path.join(__dirname, 'App.tsx')
+    ) {
+      return {
+        filePath: path.resolve(__dirname, 'config', 'disabled-monzo-mock.ts'),
+        type: 'sourceFile',
+      };
+    }
+
+    if (
       moduleName === '../demo/fixtures' &&
       context.originModulePath.endsWith(
         path.join('src', 'data', 'demo-repository.ts'),
