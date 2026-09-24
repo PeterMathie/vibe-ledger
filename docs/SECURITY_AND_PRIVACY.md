@@ -14,6 +14,12 @@ Future source adapters may write immutable raw records through the persistence
 boundary. They may not bypass classification or place source-specific shapes in
 the domain model.
 
+The interactive Demo Data importer writes only committed synthetic fixtures.
+Every demo raw transaction and monthly budget it creates is recorded in an
+ownership table. Reset deletes only those owned IDs and their app-owned
+classifications/splits; it does not use a broad database wipe or delete
+unrelated local records.
+
 ## Threat model and platform limits
 
 - **OS/app sandbox:** app-private SQLite blocks ordinary cross-app access, but it

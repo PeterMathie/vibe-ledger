@@ -31,10 +31,11 @@ An investor/product-overview slideshow is included at [`docs/product-overview.ht
 
 ## Status
 
-Phase 0 foundation implementation is underway. The repository now contains an
-Expo React Native scaffold for Android and iOS, a pure TypeScript semantic
-engine, Expo SQLite migrations, deterministic fixtures, and executable
-money-model acceptance tests.
+The repository contains an Expo React Native app for Android and iOS, a pure
+TypeScript semantic engine, Expo SQLite migrations, deterministic fixtures, and
+executable money-model acceptance tests. The first interactive layer provides a
+clearly labelled local Demo Data flow, a Home budget summary, and a read-only
+Explorer. It never connects to Monzo or requests real credentials.
 
 The highest-risk area is **Monzo authentication/sync for a phone-only local app**, not the budgeting logic. The Monzo Developer API is suitable for a personal/small-user project, but its OAuth model creates constraints for a purely client-side app. See `docs/MONZO_INTEGRATION.md`.
 
@@ -54,13 +55,19 @@ npm run ios
 `adb`, and an already-created emulator or connected device. `npm run ios`
 expects macOS with a supported Xcode simulator environment.
 
+On first launch, choose **Load Demo Data** to import deterministic synthetic
+records. Importing again is idempotent. **Reset** removes only records explicitly
+owned by the demo dataset.
+
 Architecture and test boundaries are documented in
 [`docs/FOUNDATION.md`](docs/FOUNDATION.md). The strict-local Monzo integration
 decision and security boundaries are recorded in
 [`docs/adr/0001-strict-local-monzo.md`](docs/adr/0001-strict-local-monzo.md).
 Security/privacy controls and third-party policy are maintained separately in
 [`docs/SECURITY_AND_PRIVACY.md`](docs/SECURITY_AND_PRIVACY.md) and
-[`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md).
+[`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md). The showcase-derived product
+character and UI hierarchy are captured in
+[`docs/VISUAL_DIRECTION.md`](docs/VISUAL_DIRECTION.md).
 
 ## Non-negotiable product principles
 

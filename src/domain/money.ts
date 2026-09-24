@@ -64,7 +64,7 @@ export function formatMoney(value: Money, locale?: string): string {
   const integerParts = new Intl.NumberFormat(locale, {
     useGrouping: true,
     maximumFractionDigits: 0,
-  }).formatToParts(major);
+  }).formatToParts(Number(major));
   const template = formatter.formatToParts(value.amountMinor < 0 ? -1 : 1);
   const result: string[] = [];
   let insertedInteger = false;

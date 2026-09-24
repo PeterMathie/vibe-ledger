@@ -33,6 +33,9 @@ describe('BL-001 money primitive', () => {
     expect(formatMoney(money(1_234, 'GBP'), 'en-GB')).toBe('£12.34');
     expect(formatMoney(money(1_234, 'USD'), 'en-US')).toBe('$12.34');
     expect(formatMoney(money(-123_456, 'GBP'), 'en-GB')).toBe('-£1,234.56');
+    expect(formatMoney(money(Number.MAX_SAFE_INTEGER, 'GBP'), 'en-GB')).toBe(
+      '£90,071,992,547,409.91',
+    );
   });
 
   it('allocates basis points deterministically without losing pennies', () => {

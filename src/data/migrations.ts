@@ -172,6 +172,23 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX classification_rules_priority ON classification_rules(priority, enabled);
     `,
   },
+  {
+    version: 2,
+    name: 'demo-dataset-ownership',
+    sql: `
+      CREATE TABLE demo_dataset_records (
+        record_type TEXT NOT NULL CHECK (record_type IN ('RAW_TRANSACTION', 'MONTHLY_BUDGET')),
+        record_id TEXT NOT NULL,
+        PRIMARY KEY (record_type, record_id)
+      );
+
+      CREATE TABLE demo_dataset_state (
+        dataset_id TEXT PRIMARY KEY NOT NULL,
+        fixture_version INTEGER NOT NULL CHECK (fixture_version > 0),
+        loaded_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export async function migrateDatabase(database: Database): Promise<void> {

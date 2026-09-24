@@ -19,9 +19,10 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
   });
 
   it('keeps migration versions contiguous and names stable', () => {
-    expect(MIGRATIONS.map(({ version }) => version)).toEqual([1]);
+    expect(MIGRATIONS.map(({ version }) => version)).toEqual([1, 2]);
     expect(MIGRATIONS.map(({ name }) => name)).toEqual([
       'phase-zero-foundation',
+      'demo-dataset-ownership',
     ]);
   });
 
@@ -32,7 +33,7 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
     const version = await database.getFirstAsync<{ user_version: number }>(
       'PRAGMA user_version;',
     );
-    expect(version?.user_version).toBe(1);
+    expect(version?.user_version).toBe(2);
 
     const tables = await database.getAllAsync<{ name: string }>(
       `SELECT name FROM sqlite_master
@@ -42,6 +43,8 @@ describe('BL-003 local schema and BL-004 fixture importer', () => {
     expect(tables.map(({ name }) => name)).toEqual([
       'categories',
       'classification_rules',
+      'demo_dataset_records',
+      'demo_dataset_state',
       'income_adjustments',
       'monthly_budgets',
       'raw_transactions',

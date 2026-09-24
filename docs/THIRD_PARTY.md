@@ -5,16 +5,23 @@ ranges stay compatible with the selected Expo SDK.
 
 ## Runtime dependencies
 
-| Package           | Purpose                                        | Data boundary                   |
-| ----------------- | ---------------------------------------------- | ------------------------------- |
-| `expo`            | Cross-platform application runtime and tooling | Composition layer only          |
-| `expo-sqlite`     | Durable app-private relational storage         | Local raw and app-owned records |
-| `expo-status-bar` | System status-bar presentation                 | No financial data               |
-| `react`           | Component runtime                              | Presentation/composition only   |
-| `react-native`    | Android/iOS UI runtime                         | Presentation/composition only   |
+| Package                          | Purpose                                        | Data boundary                   |
+| -------------------------------- | ---------------------------------------------- | ------------------------------- |
+| `expo`                           | Cross-platform application runtime and tooling | Composition layer only          |
+| `expo-sqlite`                    | Durable app-private relational storage         | Local raw and app-owned records |
+| `expo-status-bar`                | System status-bar presentation                 | No financial data               |
+| `react`                          | Component runtime                              | Presentation/composition only   |
+| `react-native`                   | Android/iOS UI runtime                         | Presentation/composition only   |
+| `react-native-safe-area-context` | System inset-aware screen layout               | Presentation only               |
 
 No analytics, crash-reporting, networking, authentication, advertising, or
 generative-AI SDK is installed.
+
+The interactive Demo Data, Home, and Explorer layer uses
+`react-native-safe-area-context`, Expo's compatible system-inset primitive,
+because React Native 0.86 deprecates its built-in `SafeAreaView`. Navigation,
+system-theme support, and accessible controls otherwise use the existing React
+Native runtime.
 
 ## Development dependencies
 

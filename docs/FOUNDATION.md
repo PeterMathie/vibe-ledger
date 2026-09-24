@@ -2,10 +2,11 @@
 
 ## Scope
 
-This foundation implements the Phase 0 semantic engine for the Expo app,
-targeting Android and iOS from one TypeScript codebase. It deliberately does
-not implement product screens, Monzo OAuth, live sync, search, subscription
-detection, or a sync broker.
+This foundation and first interactive layer implement the Phase 0 semantic
+engine and fixture-backed Home/Explorer experience for the Expo app, targeting
+Android and iOS from one TypeScript codebase. They deliberately do not implement
+Monzo OAuth, live sync, search, transaction editing, subscription detection, or
+a sync broker.
 
 ## Document ownership
 
@@ -18,10 +19,15 @@ integration decisions in versioned ADRs.
 ## Module boundaries
 
 ```text
-Expo React Native UI (future)
+Expo React Native Home / Explorer
         |
         v
-Pure TypeScript domain (src/domain)
+Pure view models (src/app/view-models.ts)
+        |
+        v
+Runtime repository (src/data/demo-repository.ts)
+        |
+        +----> Pure TypeScript domain (src/domain)
         |
         v
 Persistence ports (src/data/database.ts)
@@ -37,6 +43,10 @@ Persistence ports (src/data/database.ts)
 - `src/data/classification-repository.ts` stores app-owned interpretations
   separately and retains inactive history.
 - `src/data/expo-database.ts` is the only Expo SQLite adapter.
+- `src/data/demo-repository.ts` owns deterministic demo bootstrap, reset, and
+  read queries. Demo ownership rows ensure reset cannot delete unrelated data.
+- `src/app/view-models.ts` converts semantic-engine output into Home and
+  Explorer labels and typed drill-down filters without importing React Native.
 - `src/app/startup.ts` is the composition boundary. It may depend on Expo and
   persistence, but domain modules must never depend on it.
 
@@ -77,6 +87,10 @@ Future startup work must preserve this order:
   account numbers, or real personal data.
 - Fixture IDs and clocks are explicit. Tests must not depend on wall-clock time,
   random IDs, locale defaults, or execution order.
+- The interactive demo includes ordinary spend, a split, saving contributions
+  and withdrawal, internal transfer, linked refund and reimbursement, explicit
+  exclusions, historical targets, low-confidence review, a large legal amount,
+  and an annual subscription represented only as underlying spend metadata.
 - Node's in-memory SQLite implementation is used only to execute real migration
   and importer SQL in tests. Android runtime persistence remains Expo SQLite.
 - `npm test` explicitly fails if Vitest discovers zero tests.
@@ -90,9 +104,9 @@ npm run lint
 npm run format:check
 ```
 
-UI and platform end-to-end tests should be added with their corresponding UI
-tickets; Phase 0 tests exercise observable domain outcomes and database
-constraints.
+Pure view-model tests cover Home/Explorer behavior and exact drill-down filter
+contracts. SQLite integration tests cover demo load, idempotency, historical
+targets, classified reads, and ownership-safe reset.
 
 Android was the locally available runtime for this foundation smoke test. An
 iOS runtime smoke test remains a platform validation step when a supported
@@ -113,11 +127,9 @@ These are requirements for their owning backlog stages, not Phase 0 features:
 - export/restore must use a versioned strict schema, validate completely, and
   commit atomically; never expose a raw full-table JSON dump;
 - transaction-editor drafts must be durable before editor UI ships;
-- the first product UI must introduce semantic design tokens plus accessibility
-  tests for screen readers, touch targets, contrast, and non-colour status;
 - device end-to-end tests must cover fresh install, upgrade retention, fixture
-  import, reclassification, drill-down, offline restart, export/restore, and
-  wipe;
+  import, reclassification, offline restart, export/restore, and wipe as those
+  owning features ship;
 - release builds require persistent signing identity and reproducible build
   instructions; signing secrets never enter the repository;
 - every migration series must prove both fresh-install and retained-data upgrade

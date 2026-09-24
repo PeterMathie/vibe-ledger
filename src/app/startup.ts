@@ -2,15 +2,18 @@ import { openDatabaseAsync } from 'expo-sqlite';
 
 import { expoDatabase } from '../data/expo-database';
 import { migrateDatabase } from '../data/migrations';
+import type { Database } from '../data/database';
 
-let startup: Promise<void> | null = null;
+let startup: Promise<Database> | null = null;
 
-export function initializeApplication(): Promise<void> {
+export function initializeApplication(): Promise<Database> {
   startup ??= prepareLocalDatabase();
   return startup;
 }
 
-async function prepareLocalDatabase(): Promise<void> {
+async function prepareLocalDatabase(): Promise<Database> {
   const database = await openDatabaseAsync('vibe-ledger.db');
-  await migrateDatabase(expoDatabase(database));
+  const adapter = expoDatabase(database);
+  await migrateDatabase(adapter);
+  return adapter;
 }
