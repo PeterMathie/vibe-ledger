@@ -97,3 +97,36 @@ export interface ClassificationRule {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+export type SubscriptionDetectionState = 'DETECTED' | 'CONFIRMED' | 'MANUAL';
+export type RenewalIntent = 'COMMITTED' | 'LIKELY' | 'UNKNOWN' | 'NOT_RENEWING';
+
+export interface Subscription {
+  readonly id: string;
+  readonly name: string;
+  readonly merchantMatch: string | null;
+  readonly billingAmountMinor: number;
+  readonly billingCurrency: string;
+  readonly intervalMonths: number | null;
+  readonly intervalDays: number | null;
+  readonly lastPaymentDate: string | null;
+  readonly nextExpectedDate: string | null;
+  readonly detectionState: SubscriptionDetectionState;
+  readonly renewalIntent: RenewalIntent;
+  readonly categoryId: string;
+  readonly active: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface SubscriptionReservePlan {
+  readonly id: string;
+  readonly subscriptionId: string;
+  readonly targetAmountMinor: number;
+  readonly targetCurrency: string;
+  readonly reservedAmountMinor: number;
+  readonly targetDate: string;
+  readonly enabled: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}

@@ -17,6 +17,11 @@ describe('BL-001 money primitive', () => {
       currency: 'GBP',
     });
     expect(parseDecimalMoney('14.99', 'GBP').amountMinor).toBe(1_499);
+    expect(parseDecimalMoney('100', 'JPY').amountMinor).toBe(100);
+    expect(parseDecimalMoney('1.234', 'BHD').amountMinor).toBe(1_234);
+    expect(() => parseDecimalMoney('1.1', 'JPY')).toThrow(
+      'no more than 0 decimal places',
+    );
     expect(() => parseDecimalMoney('1.001', 'GBP')).toThrow(
       'no more than two decimal places',
     );

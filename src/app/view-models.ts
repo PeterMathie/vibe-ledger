@@ -511,6 +511,9 @@ function effectiveCategories(
 }
 
 function explorerTitle(filter: ExplorerFilter): string {
+  if (filter.subscriptionId !== undefined) {
+    return 'Subscription payments';
+  }
   if (filter.categoryIds !== undefined) {
     return 'Category details';
   }

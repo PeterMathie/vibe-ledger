@@ -21,19 +21,31 @@ export function money(amountMinor: number, currency: string): Money {
 }
 
 export function parseDecimalMoney(value: string, currency: string): Money {
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  const normalizedCurrency = money(0, currency).currency;
+  const fractionDigits =
+    new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: normalizedCurrency,
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+  const match = new RegExp(
+    fractionDigits === 0
+      ? '^(\\d+)$'
+      : `^(\\d+)(?:\\.(\\d{1,${fractionDigits}}))?$`,
+  ).exec(value.trim());
   if (match === null) {
     throw new DomainValidationError(
-      'Money input must use no more than two decimal places.',
+      `Money input must use no more than ${
+        fractionDigits === 2 ? 'two' : fractionDigits
+      } decimal places.`,
     );
   }
   const whole = BigInt(match[1] ?? '0');
-  const fraction = BigInt((match[2] ?? '').padEnd(2, '0'));
-  const amountMinor = whole * 100n + fraction;
+  const fraction = BigInt((match[2] ?? '').padEnd(fractionDigits, '0') || '0');
+  const amountMinor = whole * 10n ** BigInt(fractionDigits) + fraction;
   if (amountMinor > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new DomainValidationError('Money amount exceeds safe integer range.');
   }
-  return money(Number(amountMinor), currency);
+  return money(Number(amountMinor), normalizedCurrency);
 }
 
 export function addMoney(left: Money, right: Money): Money {

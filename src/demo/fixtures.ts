@@ -6,7 +6,7 @@ import type {
 } from '../domain/enums';
 
 export const DEMO_DATASET_ID = 'vibe-ledger-synthetic-demo';
-export const DEMO_FIXTURE_VERSION = 2;
+export const DEMO_FIXTURE_VERSION = 3;
 export const DEMO_CLOCK = '2026-09-24T12:00:00.000Z';
 
 export interface DemoBudgetFixture {
@@ -33,6 +33,7 @@ export interface DemoSplitFixture {
 export interface DemoTransactionFixture {
   readonly id: string;
   readonly amountMinor: number;
+  readonly currency: string;
   readonly description: string;
   readonly merchantName: string | null;
   readonly createdAt: string;
@@ -45,6 +46,27 @@ export interface DemoTransactionFixture {
   readonly offsetId: string | null;
   readonly note: string | null;
   readonly splits?: readonly DemoSplitFixture[];
+}
+
+export interface DemoSubscriptionFixture {
+  readonly id: string;
+  readonly name: string;
+  readonly merchantMatch: string | null;
+  readonly billingAmountMinor: number;
+  readonly billingCurrency: string;
+  readonly intervalMonths: number | null;
+  readonly intervalDays: number | null;
+  readonly lastPaymentDate: string | null;
+  readonly nextExpectedDate: string | null;
+  readonly detectionState: 'DETECTED' | 'CONFIRMED' | 'MANUAL';
+  readonly renewalIntent: 'COMMITTED' | 'LIKELY' | 'UNKNOWN' | 'NOT_RENEWING';
+  readonly active: boolean;
+  readonly transactionIds: readonly string[];
+  readonly reservePlan?: {
+    readonly targetAmountMinor: number;
+    readonly reservedAmountMinor: number;
+    readonly targetDate: string;
+  };
 }
 
 export const DEMO_BUDGETS: readonly DemoBudgetFixture[] = [
@@ -199,8 +221,108 @@ export const DEMO_TRANSACTIONS: readonly DemoTransactionFixture[] = [
     'SPEND',
     'category:subscriptions',
     {
+      merchantName: 'Studio Annual',
       note: 'Underlying annual subscription spend; no synthetic monthly expense.',
     },
+  ),
+  transaction(
+    'annual-subscription-2024',
+    -9_000,
+    'STUDIO ANNUAL',
+    '2024-09-08T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Studio Annual' },
+  ),
+  transaction(
+    'annual-subscription-2025',
+    -9_000,
+    'STUDIO ANNUAL',
+    '2025-09-08T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Studio Annual' },
+  ),
+  transaction(
+    'music-monthly-january',
+    -1_199,
+    'MELODY MUSIC',
+    '2026-01-05T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Melody Music' },
+  ),
+  transaction(
+    'music-monthly-february',
+    -1_249,
+    'MELODY MUSIC PAYMENT',
+    '2026-02-05T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Melody Musc' },
+  ),
+  transaction(
+    'music-monthly-march',
+    -1_199,
+    'MELODY MUSIC CARD',
+    '2026-03-05T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Melody Music UK' },
+  ),
+  transaction(
+    'usd-tool-2022',
+    -20_000,
+    'GLOBAL TOOL',
+    '2022-09-10T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { currency: 'USD', merchantName: 'Global Tool' },
+  ),
+  transaction(
+    'usd-tool-2024',
+    -20_000,
+    'GLOBAL TOOL',
+    '2024-09-10T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { currency: 'USD', merchantName: 'Global Tool' },
+  ),
+  transaction(
+    'usd-tool-2026',
+    -20_000,
+    'GLOBAL TOOL',
+    '2026-09-10T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { currency: 'USD', merchantName: 'Global Tool' },
+  ),
+  transaction(
+    'irregular-one',
+    -2_000,
+    'MARKET CLUB',
+    '2026-01-02T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Market Club' },
+  ),
+  transaction(
+    'irregular-two',
+    -2_050,
+    'MARKET CLUB',
+    '2026-02-20T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Market Club' },
+  ),
+  transaction(
+    'irregular-three',
+    -1_990,
+    'MARKET CLUB',
+    '2026-06-01T12:00:00.000Z',
+    'SPEND',
+    'category:subscriptions',
+    { merchantName: 'Market Club' },
   ),
   transaction(
     'holiday-hotel',
@@ -298,7 +420,80 @@ export const DEMO_TRANSACTIONS: readonly DemoTransactionFixture[] = [
   ),
 ];
 
+export const DEMO_SUBSCRIPTIONS: readonly DemoSubscriptionFixture[] = [
+  {
+    id: 'demo-subscription:studio-annual',
+    name: 'Studio Annual',
+    merchantMatch: 'studio annual',
+    billingAmountMinor: 9_000,
+    billingCurrency: 'GBP',
+    intervalMonths: 12,
+    intervalDays: null,
+    lastPaymentDate: '2026-09-08',
+    nextExpectedDate: '2027-09-08',
+    detectionState: 'CONFIRMED',
+    renewalIntent: 'COMMITTED',
+    active: true,
+    transactionIds: [
+      'annual-subscription-2024',
+      'annual-subscription-2025',
+      'annual-subscription',
+    ],
+    reservePlan: {
+      targetAmountMinor: 9_000,
+      reservedAmountMinor: 3_000,
+      targetDate: '2027-03-24',
+    },
+  },
+  {
+    id: 'demo-subscription:global-tool',
+    name: 'Global Tool',
+    merchantMatch: 'global tool',
+    billingAmountMinor: 20_000,
+    billingCurrency: 'USD',
+    intervalMonths: 24,
+    intervalDays: null,
+    lastPaymentDate: '2026-09-10',
+    nextExpectedDate: '2028-09-10',
+    detectionState: 'CONFIRMED',
+    renewalIntent: 'COMMITTED',
+    active: true,
+    transactionIds: ['usd-tool-2022', 'usd-tool-2024', 'usd-tool-2026'],
+  },
+  {
+    id: 'demo-subscription:piano',
+    name: 'Piano lessons',
+    merchantMatch: null,
+    billingAmountMinor: 4_500,
+    billingCurrency: 'GBP',
+    intervalDays: 28,
+    intervalMonths: null,
+    lastPaymentDate: '2026-09-20',
+    nextExpectedDate: '2026-10-18',
+    detectionState: 'MANUAL',
+    renewalIntent: 'LIKELY',
+    active: true,
+    transactionIds: [],
+  },
+  {
+    id: 'demo-subscription:old-news',
+    name: 'Old News',
+    merchantMatch: 'old news',
+    billingAmountMinor: 799,
+    billingCurrency: 'GBP',
+    intervalMonths: 1,
+    intervalDays: null,
+    lastPaymentDate: '2026-08-01',
+    nextExpectedDate: null,
+    detectionState: 'MANUAL',
+    renewalIntent: 'NOT_RENEWING',
+    active: false,
+    transactionIds: [],
+  },
+];
+
 interface TransactionOptions {
+  readonly currency?: string;
   readonly merchantName?: string;
   readonly budgetScope?: BudgetScope;
   readonly classificationSource?: ClassificationSource;
@@ -321,6 +516,7 @@ function transaction(
   return {
     id,
     amountMinor,
+    currency: options.currency ?? 'GBP',
     description,
     merchantName: options.merchantName ?? null,
     createdAt,

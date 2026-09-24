@@ -23,6 +23,7 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface LedgerQuery {
   readonly date: DateFilter;
+  readonly subscriptionId?: string;
   readonly merchant?: string;
   readonly categoryIds?: readonly string[];
   readonly superCategories?: readonly SuperCategoryKey[];

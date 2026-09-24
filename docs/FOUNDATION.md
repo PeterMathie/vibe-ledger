@@ -5,8 +5,8 @@
 This foundation and first interactive layer implement the Phase 0 semantic
 engine and fixture-backed Home/Explorer experience for the Expo app, targeting
 Android and iOS from one TypeScript codebase. They deliberately do not implement
-Monzo OAuth, live sync, search, transaction editing, subscription detection, or
-a sync broker.
+Monzo OAuth, live sync, Money Map, export/wipe, release signing, or a sync
+broker.
 
 ## Document ownership
 
@@ -47,12 +47,16 @@ Persistence ports (src/data/database.ts)
   current-month allocation persistence, and parameterised typed queries. Demo
   ownership rows ensure reset cannot delete unrelated data.
 - `src/domain/query.ts` is the canonical query contract shared by Home,
-  Breakdown, Trends, and future Subscriptions. No UI value is interpolated
-  into SQL.
+  Breakdown, Trends, and Subscriptions. No UI value is interpolated into SQL.
 - `src/domain/analytics.ts` defines the semantic Trend measures.
   `src/domain/trends.ts` aggregates monthly bars, category composition, stored
   targets, transaction counts, and canonical drill-down payloads without
   merging Living/Fun spending, Saving contributions, and net savings movement.
+- `src/domain/subscriptions.ts` keeps arbitrary month/day intervals, monthly
+  equivalents, renewal dates, and optional reserve calculations exact until
+  display rounding. `src/data/subscription-repository.ts` stores manual and
+  confirmed records separately from immutable source transactions, partitions
+  summaries by currency, and links cards to exact Breakdown queries.
 - `src/app/allocation.ts`, `src/app/heat-map.ts`, and `src/app/trends.ts` hold
   exact, React-free interaction math for the allocation ring, runover,
   calendar, period boundaries, and chart layout.
@@ -98,10 +102,13 @@ Future startup work must preserve this order:
   account numbers, or real personal data.
 - Fixture IDs and clocks are explicit. Tests must not depend on wall-clock time,
   random IDs, locale defaults, or execution order.
-- The interactive demo includes ordinary spend, an included runover example, a split, saving contributions
-  and withdrawal, internal transfer, linked refund and reimbursement, explicit
-  exclusions, historical targets, low-confidence review, a large legal amount,
-  and an annual subscription represented only as underlying spend metadata.
+- The interactive demo includes ordinary spend, an included runover example, a
+  split, saving contributions and withdrawal, internal transfer, linked refund
+  and reimbursement, explicit exclusions, historical targets, low-confidence
+  review, a large legal amount, plus monthly, annual, 24-month USD, uncertain,
+  amount-drift, irregular, and disabled subscription fixtures. Subscription
+  projections remain metadata over linked real spend and never create
+  synthetic monthly transactions.
 - Node's in-memory SQLite implementation is used only to execute real migration
   and importer SQL in tests. Android runtime persistence remains Expo SQLite.
 - `npm test` explicitly fails if Vitest discovers zero tests.

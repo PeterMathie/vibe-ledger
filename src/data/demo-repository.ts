@@ -25,6 +25,7 @@ import {
   DEMO_CLOCK,
   DEMO_DATASET_ID,
   DEMO_FIXTURE_VERSION,
+  DEMO_SUBSCRIPTIONS,
   DEMO_TRANSACTIONS,
 } from '../demo/fixtures';
 import type { Database, DatabaseValue } from './database';
@@ -169,11 +170,12 @@ export async function importDemoData(
           currency, description, merchant_id, merchant_name, source_category,
           created_at, settled_at, raw_payload_json, first_seen_at,
           last_synced_at, source_deleted
-        ) VALUES (?, 'demo', ?, NULL, ?, 'GBP', ?, NULL, ?, NULL, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, 'demo', ?, NULL, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, ?, 0)
         ON CONFLICT(source, source_transaction_id) DO NOTHING;`,
         rawId,
         fixture.id,
         fixture.amountMinor,
+        fixture.currency,
         fixture.description,
         fixture.merchantName,
         fixture.createdAt,
@@ -226,6 +228,59 @@ export async function importDemoData(
       }
     }
 
+    for (const fixture of DEMO_SUBSCRIPTIONS) {
+      const subscriptionResult = await database.runAsync(
+        `INSERT INTO subscriptions (
+          id, name, merchant_match, billing_amount_minor, billing_currency,
+          interval_months, interval_days, last_payment_date, next_expected_date,
+          detection_state, renewal_intent, category_id, active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'category:subscriptions', ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING;`,
+        fixture.id,
+        fixture.name,
+        fixture.merchantMatch,
+        fixture.billingAmountMinor,
+        fixture.billingCurrency,
+        fixture.intervalMonths,
+        fixture.intervalDays,
+        fixture.lastPaymentDate,
+        fixture.nextExpectedDate,
+        fixture.detectionState,
+        fixture.renewalIntent,
+        fixture.active ? 1 : 0,
+        DEMO_CLOCK,
+        DEMO_CLOCK,
+      );
+      if (subscriptionResult.changes === 1) {
+        for (const transactionId of fixture.transactionIds) {
+          await database.runAsync(
+            `INSERT INTO subscription_transactions (
+              subscription_id, raw_transaction_id, linked_at
+            ) VALUES (?, ?, ?);`,
+            fixture.id,
+            demoRawId(transactionId),
+            DEMO_CLOCK,
+          );
+        }
+        if (fixture.reservePlan !== undefined) {
+          await database.runAsync(
+            `INSERT INTO subscription_reserve_plans (
+              id, subscription_id, target_amount_minor, target_currency,
+              reserved_amount_minor, target_date, enabled, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?);`,
+            `demo-reserve:${fixture.id}`,
+            fixture.id,
+            fixture.reservePlan.targetAmountMinor,
+            fixture.billingCurrency,
+            fixture.reservePlan.reservedAmountMinor,
+            fixture.reservePlan.targetDate,
+            DEMO_CLOCK,
+            DEMO_CLOCK,
+          );
+        }
+      }
+    }
+
     await database.runAsync(
       `INSERT INTO demo_dataset_state (dataset_id, fixture_version, loaded_at)
        VALUES (?, ?, ?)
@@ -253,6 +308,12 @@ export async function resetDemoData(database: Database): Promise<void> {
   await database.execAsync('BEGIN IMMEDIATE;');
   try {
     await database.execAsync(`
+      DELETE FROM subscriptions WHERE id LIKE 'demo-subscription:%';
+      DELETE FROM subscription_transactions
+      WHERE raw_transaction_id IN (
+        SELECT record_id FROM demo_dataset_records
+        WHERE record_type = 'RAW_TRANSACTION'
+      );
       DELETE FROM classification_changes
       WHERE raw_transaction_id IN (
         SELECT record_id FROM demo_dataset_records
@@ -334,15 +395,6 @@ export async function queryLedgerTransactions(
   query: LedgerQuery,
   currency: string,
 ): Promise<LedgerQueryResult> {
-  if (
-    query.subscriptionStatuses !== undefined &&
-    query.subscriptionStatuses.length > 0
-  ) {
-    throw new DomainValidationError(
-      'Subscription filters are unavailable until subscription metadata ships.',
-    );
-  }
-
   const { clauses, params } = buildQueryWhere(query, currency);
   const rows = await database.getAllAsync<{ id: string }>(
     `SELECT r.id
@@ -575,6 +627,48 @@ function buildQueryWhere(
 ): { readonly clauses: string[]; readonly params: DatabaseValue[] } {
   const clauses = ['r.currency = ?', 'r.source_deleted = 0'];
   const params: DatabaseValue[] = [currency];
+
+  if (query.subscriptionId !== undefined) {
+    clauses.push(
+      `EXISTS (
+        SELECT 1 FROM subscription_transactions subscription_link
+        WHERE subscription_link.raw_transaction_id = r.id
+          AND subscription_link.subscription_id = ?
+      )`,
+    );
+    params.push(query.subscriptionId);
+  }
+  if (
+    query.subscriptionStatuses !== undefined &&
+    query.subscriptionStatuses.length > 0
+  ) {
+    const statuses = query.subscriptionStatuses;
+    const positive = statuses.filter((status) => status !== 'NOT_SUBSCRIPTION');
+    const parts: string[] = [];
+    if (positive.length > 0) {
+      const placeholders = positive.map(() => '?').join(', ');
+      parts.push(
+        `EXISTS (
+          SELECT 1
+          FROM subscription_transactions subscription_link
+          JOIN subscriptions subscription
+            ON subscription.id = subscription_link.subscription_id
+          WHERE subscription_link.raw_transaction_id = r.id
+            AND subscription.detection_state IN (${placeholders})
+        )`,
+      );
+      params.push(...positive);
+    }
+    if (statuses.includes('NOT_SUBSCRIPTION')) {
+      parts.push(
+        `NOT EXISTS (
+          SELECT 1 FROM subscription_transactions subscription_link
+          WHERE subscription_link.raw_transaction_id = r.id
+        )`,
+      );
+    }
+    clauses.push(`(${parts.join(' OR ')})`);
+  }
 
   if (query.date.kind === 'DAY') {
     assertDate(query.date.date);

@@ -206,6 +206,66 @@ export const MIGRATIONS: readonly Migration[] = [
         ON classification_changes(raw_transaction_id, created_at DESC);
     `,
   },
+  {
+    version: 4,
+    name: 'subscriptions',
+    sql: `
+      CREATE TABLE subscriptions (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        merchant_match TEXT,
+        billing_amount_minor INTEGER NOT NULL CHECK (billing_amount_minor >= 0),
+        billing_currency TEXT NOT NULL CHECK (length(billing_currency) = 3),
+        interval_months INTEGER CHECK (interval_months > 0),
+        interval_days INTEGER CHECK (interval_days > 0),
+        last_payment_date TEXT,
+        next_expected_date TEXT,
+        detection_state TEXT NOT NULL
+          CHECK (detection_state IN ('DETECTED', 'CONFIRMED', 'MANUAL')),
+        renewal_intent TEXT NOT NULL
+          CHECK (renewal_intent IN ('COMMITTED', 'LIKELY', 'UNKNOWN', 'NOT_RENEWING')),
+        category_id TEXT NOT NULL REFERENCES categories(id),
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (
+          (interval_months IS NOT NULL AND interval_days IS NULL) OR
+          (interval_months IS NULL AND interval_days IS NOT NULL)
+        )
+      );
+
+      CREATE TABLE subscription_reserve_plans (
+        id TEXT PRIMARY KEY NOT NULL,
+        subscription_id TEXT NOT NULL UNIQUE
+          REFERENCES subscriptions(id) ON DELETE CASCADE,
+        target_amount_minor INTEGER NOT NULL CHECK (target_amount_minor >= 0),
+        target_currency TEXT NOT NULL CHECK (length(target_currency) = 3),
+        reserved_amount_minor INTEGER NOT NULL CHECK (reserved_amount_minor >= 0),
+        target_date TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE subscription_transactions (
+        subscription_id TEXT NOT NULL
+          REFERENCES subscriptions(id) ON DELETE CASCADE,
+        raw_transaction_id TEXT NOT NULL REFERENCES raw_transactions(id),
+        linked_at TEXT NOT NULL,
+        PRIMARY KEY (subscription_id, raw_transaction_id)
+      );
+
+      CREATE TABLE subscription_detection_denials (
+        signature TEXT PRIMARY KEY NOT NULL,
+        denied_at TEXT NOT NULL
+      );
+
+      CREATE INDEX subscriptions_next_expected_date
+        ON subscriptions(next_expected_date, active);
+      CREATE INDEX subscription_transactions_raw
+        ON subscription_transactions(raw_transaction_id);
+    `,
+  },
 ];
 
 export async function migrateDatabase(database: Database): Promise<void> {

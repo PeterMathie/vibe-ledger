@@ -306,17 +306,18 @@ describe('synthetic Demo Data repository', () => {
     ).toBe(true);
   });
 
-  it('rejects unsupported subscription filters and invalid query values', async () => {
+  it('supports subscription filters and rejects invalid query values', async () => {
     await importDemoData(database);
-    await expect(
-      queryLedgerTransactions(
-        database,
-        monthQuery('2026-09', {
-          subscriptionStatuses: ['CONFIRMED'],
-        }),
-        'GBP',
-      ),
-    ).rejects.toThrow('Subscription filters are unavailable');
+    const subscriptions = await queryLedgerTransactions(
+      database,
+      monthQuery('2026-09', {
+        subscriptionStatuses: ['CONFIRMED'],
+      }),
+      'GBP',
+    );
+    expect(subscriptions.matches.map(({ raw }) => raw.id)).toEqual([
+      'demo:annual-subscription',
+    ]);
     await expect(
       queryLedgerTransactions(
         database,

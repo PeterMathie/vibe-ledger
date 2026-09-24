@@ -57,6 +57,17 @@ import {
   updateMerchantRule,
 } from './src/data/classification-repository';
 import {
+  confirmSubscriptionSuggestion,
+  denySubscriptionSuggestion,
+  detectSubscriptionSuggestions,
+  disableSubscription,
+  listSubscriptions,
+  saveSubscriptionDetails,
+  summarizeSubscriptions,
+  type SubscriptionRecord,
+  type SubscriptionSuggestion,
+} from './src/data/subscription-repository';
+import {
   createMonthlyBudget,
   type AllocationRatios,
 } from './src/domain/budget';
@@ -95,6 +106,7 @@ import type {
   Category,
   ClassificationRule,
   ClassifiedTransaction,
+  RenewalIntent,
 } from './src/domain/types';
 
 type LoadState =
@@ -106,11 +118,13 @@ type LoadState =
 type Screen =
   | { readonly name: 'HOME' }
   | { readonly name: 'TRENDS' }
+  | { readonly name: 'SUBSCRIPTIONS' }
   | {
       readonly name: 'EXPLORER';
       readonly filter: ExplorerFilter;
+      readonly currency: string;
       readonly unrecognizedTokens: readonly string[];
-      readonly returnTo: 'HOME' | 'TRENDS';
+      readonly returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS';
     };
 
 type QueryLoadState =
@@ -270,7 +284,7 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       unrecognizedTokens: readonly string[] = [],
-      returnTo: 'HOME' | 'TRENDS' = 'HOME',
+      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' = 'HOME',
     ) => {
       if (database === null) {
         return;
@@ -278,6 +292,7 @@ export default function App() {
       setScreen({
         name: 'EXPLORER',
         filter,
+        currency,
         unrecognizedTokens,
         returnTo,
       });
@@ -322,7 +337,7 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       month: string,
-      returnTo: 'HOME' | 'TRENDS',
+      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS',
     ) => {
       if (database === null) {
         return;
@@ -403,6 +418,7 @@ export default function App() {
           onSelectMonth={selectMonth}
           onExplore={(filter) => openExplorer(filter, budget.currency)}
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
+          onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
           onUpdateAllocation={updateAllocation}
           onReset={resetDemo}
         />
@@ -415,6 +431,32 @@ export default function App() {
             openExplorer(filter, budget.currency, [], 'TRENDS')
           }
           onHome={() => setScreen({ name: 'HOME' })}
+          onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          palette={palette}
+        />
+      ) : screen.name === 'SUBSCRIPTIONS' ? (
+        <SubscriptionsScreen
+          database={database}
+          onExplore={(subscriptionId, currency) =>
+            openExplorer(
+              {
+                date: {
+                  kind: 'RANGE',
+                  startDate: '1900-01-01',
+                  endDate: '2100-12-31',
+                },
+                subscriptionId,
+              },
+              currency,
+              [],
+              'SUBSCRIPTIONS',
+            )
+          }
+          onHome={() => setScreen({ name: 'HOME' })}
+          onOpenTrends={() => setScreen({ name: 'TRENDS' })}
+          onOpenBreakdown={() =>
+            openExplorer(monthQuery(budget.monthKey), budget.currency)
+          }
           palette={palette}
         />
       ) : queryState.status === 'READY' ? (
@@ -423,16 +465,16 @@ export default function App() {
           database={database}
           palette={palette}
           filter={screen.filter}
-          currency={budget.currency}
+          currency={screen.currency}
           queryResult={queryState.result}
           unrecognizedTokens={screen.unrecognizedTokens}
           onChangeFilter={(nextFilter) =>
-            openExplorer(nextFilter, budget.currency, [], screen.returnTo)
+            openExplorer(nextFilter, screen.currency, [], screen.returnTo)
           }
           onSearch={(parsed) =>
             openExplorer(
               parsed.query,
-              budget.currency,
+              screen.currency,
               parsed.unrecognizedTokens,
               screen.returnTo,
             )
@@ -440,17 +482,20 @@ export default function App() {
           onDataChanged={() =>
             refreshAfterCorrection(
               screen.filter,
-              budget.currency,
+              screen.currency,
               budget.monthKey,
               screen.returnTo,
             )
           }
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
+          onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
           onBack={() => {
             setScreen(
               screen.returnTo === 'TRENDS'
                 ? { name: 'TRENDS' }
-                : { name: 'HOME' },
+                : screen.returnTo === 'SUBSCRIPTIONS'
+                  ? { name: 'SUBSCRIPTIONS' }
+                  : { name: 'HOME' },
             );
             setQueryState({ status: 'IDLE' });
           }}
@@ -527,6 +572,7 @@ function HomeScreen({
   onSelectMonth,
   onExplore,
   onOpenTrends,
+  onOpenSubscriptions,
   onUpdateAllocation,
   onReset,
 }: {
@@ -542,6 +588,7 @@ function HomeScreen({
   readonly onSelectMonth: (month: string) => void;
   readonly onExplore: (filter: ExplorerFilter) => void;
   readonly onOpenTrends: () => void;
+  readonly onOpenSubscriptions: () => void;
   readonly onUpdateAllocation: (
     monthKey: string,
     currency: string,
@@ -856,6 +903,7 @@ function HomeScreen({
         onHome={() => undefined}
         onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
         onTrends={onOpenTrends}
+        onSubscriptions={onOpenSubscriptions}
       />
     </ScrollView>
   );
@@ -1362,6 +1410,861 @@ function HeatMapCalendar({
   );
 }
 
+type SubscriptionLoadState =
+  | { readonly status: 'LOADING' | 'ERROR' }
+  | {
+      readonly status: 'READY';
+      readonly records: readonly SubscriptionRecord[];
+      readonly suggestions: readonly SubscriptionSuggestion[];
+      readonly categories: readonly Category[];
+    };
+
+function SubscriptionsScreen({
+  database,
+  onExplore,
+  onHome,
+  onOpenBreakdown,
+  onOpenTrends,
+  palette,
+}: {
+  readonly database: Database;
+  readonly onExplore: (subscriptionId: string, currency: string) => void;
+  readonly onHome: () => void;
+  readonly onOpenBreakdown: () => void;
+  readonly onOpenTrends: () => void;
+  readonly palette: Palette;
+}) {
+  const [state, setState] = useState<SubscriptionLoadState>({
+    status: 'LOADING',
+  });
+  const [editing, setEditing] = useState<SubscriptionRecord | 'NEW' | null>(
+    null,
+  );
+  const [actionError, setActionError] = useState<string | null>(null);
+  const refreshSubscriptions = useCallback(async () => {
+    setState({ status: 'LOADING' });
+    try {
+      setState(await loadSubscriptionScreenState(database));
+    } catch {
+      setState({ status: 'ERROR' });
+    }
+  }, [database]);
+  useEffect(() => {
+    let active = true;
+    loadSubscriptionScreenState(database).then(
+      (nextState) => {
+        if (active) {
+          setState(nextState);
+        }
+      },
+      () => {
+        if (active) {
+          setState({ status: 'ERROR' });
+        }
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [database]);
+
+  const readyState = state.status === 'READY' ? state : null;
+  const summaries =
+    readyState === null
+      ? []
+      : summarizeSubscriptions(readyState.records, '2026-09-24');
+  return (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      testID="subscriptions-screen"
+    >
+      <Text style={[styles.demoPill, { color: palette.accent }]}>
+        SUBSCRIPTIONS · LOCAL METADATA
+      </Text>
+      <View style={styles.topRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.screenTitle, { color: palette.text }]}>
+            Recurring commitments
+          </Text>
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            Monthly equivalents and reserves are analytical only. Actual
+            spending remains the real linked transactions.
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setEditing('NEW')}
+          style={[styles.secondaryButton, { backgroundColor: palette.accent }]}
+          testID="subscription-create"
+        >
+          <Text style={[styles.smallButtonText, { color: palette.accentText }]}>
+            Add
+          </Text>
+        </Pressable>
+      </View>
+
+      {state.status === 'LOADING' ? (
+        <View style={styles.trendLoading} testID="subscriptions-loading">
+          <ActivityIndicator color={palette.accent} />
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            Loading local subscriptions…
+          </Text>
+        </View>
+      ) : state.status === 'ERROR' ? (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.notice,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+          ]}
+          testID="subscriptions-error"
+        >
+          <Text style={[styles.bodyText, { color: palette.text }]}>
+            Subscription metadata could not be loaded from local storage.
+          </Text>
+        </View>
+      ) : (
+        <>
+          {summaries.map((summary) => (
+            <View
+              key={summary.currency}
+              accessibilityLabel={`${summary.currency} subscription summary`}
+              style={[
+                styles.subscriptionSummary,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: palette.border,
+                },
+              ]}
+              testID={`subscription-summary-${summary.currency}`}
+            >
+              <Text style={[styles.label, { color: palette.muted }]}>
+                {summary.currency} · NO FX MIXING
+              </Text>
+              <Text style={[styles.moneyHero, { color: palette.text }]}>
+                {formatMoney(
+                  money(summary.totalMonthlyEquivalentMinor, summary.currency),
+                  'en-GB',
+                )}
+                /month
+              </Text>
+              <View style={styles.summaryRow}>
+                <SummaryMetric
+                  label="Monthly"
+                  palette={palette}
+                  value={formatMoney(
+                    money(
+                      summary.confirmedMonthlyEquivalentMinor,
+                      summary.currency,
+                    ),
+                    'en-GB',
+                  )}
+                />
+                <SummaryMetric
+                  label="Long interval"
+                  palette={palette}
+                  value={formatMoney(
+                    money(
+                      summary.longIntervalMonthlyEquivalentMinor,
+                      summary.currency,
+                    ),
+                    'en-GB',
+                  )}
+                />
+              </View>
+              <Text style={[styles.smallText, { color: palette.muted }]}>
+                Renewals: {summary.renewalsIn30Days} in 30 days ·{' '}
+                {summary.renewalsIn90Days} in 90 days
+              </Text>
+            </View>
+          ))}
+
+          {readyState !== null && readyState.suggestions.length > 0 ? (
+            <>
+              <Text style={[styles.sectionKicker, { color: palette.warning }]}>
+                UNCONFIRMED SUGGESTIONS
+              </Text>
+              <Text style={[styles.smallText, { color: palette.muted }]}>
+                Deterministic merchant, amount and repeated-interval evidence.
+                Nothing is tracked until you confirm.
+              </Text>
+              {readyState.suggestions.map((suggestion) => (
+                <View
+                  key={suggestion.signature}
+                  style={[
+                    styles.subscriptionCard,
+                    {
+                      backgroundColor: palette.surface,
+                      borderColor: palette.warning,
+                    },
+                  ]}
+                  testID={`subscription-suggestion-${suggestion.signature}`}
+                >
+                  <View style={styles.cardTitleRow}>
+                    <Text style={[styles.cardTitle, { color: palette.text }]}>
+                      {suggestion.name}
+                    </Text>
+                    <Badge
+                      label={`Suggested · ${suggestion.confidence.toLowerCase()} confidence`}
+                      palette={palette}
+                      emphasized
+                    />
+                  </View>
+                  <Text
+                    style={[styles.bodyTextStrong, { color: palette.text }]}
+                  >
+                    {formatMoney(
+                      money(
+                        suggestion.billingAmountMinor,
+                        suggestion.billingCurrency,
+                      ),
+                      'en-GB',
+                    )}{' '}
+                    every {formatSubscriptionInterval(suggestion)}
+                  </Text>
+                  <Text style={[styles.smallText, { color: palette.muted }]}>
+                    {suggestion.evidenceCount} matching payments · next expected{' '}
+                    {suggestion.nextExpectedDate}
+                  </Text>
+                  <View style={styles.subscriptionActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setActionError(null);
+                        confirmSubscriptionSuggestion(
+                          database,
+                          suggestion,
+                          `subscription:confirmed:${suggestion.signature}`,
+                          '2026-09-24T17:00:00.000Z',
+                        )
+                          .then(refreshSubscriptions)
+                          .catch(() =>
+                            setActionError(
+                              'The suggestion could not be confirmed.',
+                            ),
+                          );
+                      }}
+                      style={[
+                        styles.secondaryButton,
+                        { backgroundColor: palette.accent },
+                      ]}
+                      testID={`subscription-confirm-${suggestion.signature}`}
+                    >
+                      <Text
+                        style={[
+                          styles.smallButtonText,
+                          { color: palette.accentText },
+                        ]}
+                      >
+                        Confirm
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setActionError(null);
+                        denySubscriptionSuggestion(
+                          database,
+                          suggestion.signature,
+                          '2026-09-24T17:00:00.000Z',
+                        )
+                          .then(refreshSubscriptions)
+                          .catch(() =>
+                            setActionError(
+                              'The suggestion could not be dismissed.',
+                            ),
+                          );
+                      }}
+                      style={styles.secondaryButton}
+                      testID={`subscription-deny-${suggestion.signature}`}
+                    >
+                      <Text
+                        style={[
+                          styles.smallButtonText,
+                          { color: palette.muted },
+                        ]}
+                      >
+                        Not a subscription
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          <Text style={[styles.sectionKicker, { color: palette.accent }]}>
+            TRACKED
+          </Text>
+          {readyState === null || readyState.records.length === 0 ? (
+            <View
+              style={[
+                styles.notice,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: palette.border,
+                },
+              ]}
+              testID="subscriptions-empty"
+            >
+              <Text style={[styles.bodyText, { color: palette.text }]}>
+                No subscriptions are tracked. Add one manually or confirm a
+                suggestion.
+              </Text>
+            </View>
+          ) : (
+            readyState.records.map((record) => (
+              <SubscriptionCard
+                key={record.subscription.id}
+                onDisable={() => {
+                  setActionError(null);
+                  disableSubscription(
+                    database,
+                    record.subscription.id,
+                    '2026-09-24T17:00:00.000Z',
+                  )
+                    .then(refreshSubscriptions)
+                    .catch(() =>
+                      setActionError('The subscription could not be disabled.'),
+                    );
+                }}
+                onEdit={() => setEditing(record)}
+                onExplore={() =>
+                  onExplore(
+                    record.subscription.id,
+                    record.subscription.billingCurrency,
+                  )
+                }
+                palette={palette}
+                record={record}
+              />
+            ))
+          )}
+          {actionError === null ? null : (
+            <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+              {actionError}
+            </Text>
+          )}
+          {editing === null ? null : (
+            <SubscriptionEditor
+              categories={readyState?.categories ?? []}
+              database={database}
+              existing={editing === 'NEW' ? null : editing}
+              nextId={`subscription:manual:${(readyState?.records.length ?? 0) + 1}`}
+              onCancel={() => setEditing(null)}
+              onSaved={() => {
+                setEditing(null);
+                void refreshSubscriptions();
+              }}
+              palette={palette}
+            />
+          )}
+        </>
+      )}
+      <CoreNavigation
+        active="SUBSCRIPTIONS"
+        onBreakdown={onOpenBreakdown}
+        onHome={onHome}
+        onSubscriptions={() => undefined}
+        onTrends={onOpenTrends}
+        palette={palette}
+      />
+    </ScrollView>
+  );
+}
+
+async function loadSubscriptionScreenState(
+  database: Database,
+): Promise<Extract<SubscriptionLoadState, { status: 'READY' }>> {
+  const [records, suggestions, categories] = await Promise.all([
+    listSubscriptions(database, '2026-09-24', true),
+    detectSubscriptionSuggestions(database),
+    listCategories(database),
+  ]);
+  return { status: 'READY', records, suggestions, categories };
+}
+
+function SubscriptionCard({
+  onDisable,
+  onEdit,
+  onExplore,
+  palette,
+  record,
+}: {
+  readonly onDisable: () => void;
+  readonly onEdit: () => void;
+  readonly onExplore: () => void;
+  readonly palette: Palette;
+  readonly record: SubscriptionRecord;
+}) {
+  const { subscription } = record;
+  return (
+    <View
+      accessibilityLabel={`${subscription.name}, ${record.monthlyEquivalentLabel}, ${subscription.active ? 'active' : 'tracking stopped'}`}
+      style={[
+        styles.subscriptionCard,
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          opacity: subscription.active ? 1 : 0.65,
+        },
+      ]}
+      testID={`subscription-card-${subscription.id}`}
+    >
+      <View style={styles.cardTitleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.cardTitle, { color: palette.text }]}>
+            {subscription.name}
+          </Text>
+          <Text style={[styles.smallText, { color: palette.muted }]}>
+            {subscription.detectionState.toLowerCase()} ·{' '}
+            {subscription.active ? 'Tracking' : 'Tracking stopped'}
+          </Text>
+        </View>
+        <Text style={[styles.cardAmount, { color: palette.text }]}>
+          {record.monthlyEquivalentLabel}
+        </Text>
+      </View>
+      <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
+        Last amount{' '}
+        {formatMoney(
+          money(subscription.billingAmountMinor, subscription.billingCurrency),
+          'en-GB',
+        )}{' '}
+        · every {formatSubscriptionInterval(subscription)}
+      </Text>
+      <View style={styles.badgeRow}>
+        <Badge
+          label={`Renewal: ${renewalIntentLabel(subscription.renewalIntent)}`}
+          palette={palette}
+          emphasized={false}
+        />
+        <Badge
+          label={
+            subscription.nextExpectedDate === null
+              ? 'Next renewal unknown'
+              : `Next ${subscription.nextExpectedDate}`
+          }
+          palette={palette}
+          emphasized={false}
+        />
+        <Badge
+          label={
+            record.reservePlan === null
+              ? 'No reserve plan'
+              : `Reserve ${record.requiredReserveLabel ?? 'disabled'}`
+          }
+          palette={palette}
+          emphasized={false}
+        />
+      </View>
+      <Text style={[styles.smallText, { color: palette.muted }]}>
+        Last payment {subscription.lastPaymentDate ?? 'unknown'} ·{' '}
+        {record.linkedTransactionIds.length} linked real payment
+        {record.linkedTransactionIds.length === 1 ? '' : 's'}
+      </Text>
+      <View style={styles.subscriptionActions}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onExplore}
+          style={styles.secondaryButton}
+          testID={`subscription-breakdown-${subscription.id}`}
+        >
+          <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+            Breakdown
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onEdit}
+          style={styles.secondaryButton}
+          testID={`subscription-edit-${subscription.id}`}
+        >
+          <Text style={[styles.smallButtonText, { color: palette.accent }]}>
+            Edit
+          </Text>
+        </Pressable>
+        {subscription.active ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onDisable}
+            style={styles.secondaryButton}
+            testID={`subscription-disable-${subscription.id}`}
+          >
+            <Text style={[styles.smallButtonText, { color: palette.muted }]}>
+              Stop tracking
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function SubscriptionEditor({
+  categories,
+  database,
+  existing,
+  nextId,
+  onCancel,
+  onSaved,
+  palette,
+}: {
+  readonly categories: readonly Category[];
+  readonly database: Database;
+  readonly existing: SubscriptionRecord | null;
+  readonly nextId: string;
+  readonly onCancel: () => void;
+  readonly onSaved: () => void;
+  readonly palette: Palette;
+}) {
+  const current = existing?.subscription;
+  const [name, setName] = useState(current?.name ?? '');
+  const [amount, setAmount] = useState(
+    current === undefined ? '' : formatMinorInput(current.billingAmountMinor),
+  );
+  const [currency, setCurrency] = useState(current?.billingCurrency ?? 'GBP');
+  const [intervalKind, setIntervalKind] = useState<'MONTHS' | 'DAYS'>(
+    current?.intervalDays === null || current === undefined ? 'MONTHS' : 'DAYS',
+  );
+  const [interval, setInterval] = useState(
+    String(current?.intervalMonths ?? current?.intervalDays ?? 1),
+  );
+  const [lastPayment, setLastPayment] = useState(
+    current?.lastPaymentDate ?? '',
+  );
+  const [nextExpected, setNextExpected] = useState(
+    current?.nextExpectedDate ?? '',
+  );
+  const [renewalIntent, setRenewalIntent] = useState<RenewalIntent>(
+    current?.renewalIntent ?? 'UNKNOWN',
+  );
+  const [categoryId, setCategoryId] = useState(
+    current?.categoryId ?? 'category:subscriptions',
+  );
+  const [reserveEnabled, setReserveEnabled] = useState(
+    existing?.reservePlan?.enabled ?? false,
+  );
+  const [reserveTarget, setReserveTarget] = useState(
+    existing?.reservePlan === null || existing?.reservePlan === undefined
+      ? ''
+      : formatMinorInput(existing.reservePlan.targetAmountMinor),
+  );
+  const [reserved, setReserved] = useState(
+    existing?.reservePlan === null || existing?.reservePlan === undefined
+      ? '0.00'
+      : formatMinorInput(existing.reservePlan.reservedAmountMinor),
+  );
+  const [reserveDate, setReserveDate] = useState(
+    existing?.reservePlan?.targetDate ?? '',
+  );
+  const [error, setError] = useState<string | null>(null);
+  const commit = async () => {
+    setError(null);
+    try {
+      const parsedAmount = parseDecimalMoney(amount, currency);
+      const parsedInterval = Number(interval);
+      const timestamp = '2026-09-24T17:00:00.000Z';
+      const id = current?.id ?? nextId;
+      const subscriptionInput = {
+        id,
+        name,
+        merchantMatch: current?.merchantMatch ?? name,
+        billingAmountMinor: parsedAmount.amountMinor,
+        billingCurrency: parsedAmount.currency,
+        intervalMonths: intervalKind === 'MONTHS' ? parsedInterval : null,
+        intervalDays: intervalKind === 'DAYS' ? parsedInterval : null,
+        lastPaymentDate: lastPayment.trim() === '' ? null : lastPayment.trim(),
+        nextExpectedDate:
+          nextExpected.trim() === '' ? null : nextExpected.trim(),
+        detectionState: current?.detectionState ?? 'MANUAL',
+        renewalIntent,
+        categoryId,
+        active: current?.active ?? true,
+        createdAt: current?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      } as const;
+      const reserveInput = reserveEnabled
+        ? {
+            id: existing?.reservePlan?.id ?? `reserve:${id}`,
+            subscriptionId: id,
+            targetAmountMinor: parseDecimalMoney(reserveTarget, currency)
+              .amountMinor,
+            targetCurrency: parsedAmount.currency,
+            reservedAmountMinor: parseDecimalMoney(reserved, currency)
+              .amountMinor,
+            targetDate: reserveDate,
+            enabled: true,
+            createdAt: existing?.reservePlan?.createdAt ?? timestamp,
+            updatedAt: timestamp,
+          }
+        : existing?.reservePlan === null || existing === null
+          ? null
+          : {
+              ...existing.reservePlan,
+              enabled: false,
+              updatedAt: timestamp,
+            };
+      await saveSubscriptionDetails(database, subscriptionInput, reserveInput);
+      onSaved();
+    } catch {
+      setError(
+        'Check the amount, currency, one positive interval, dates, category and reserve values.',
+      );
+    }
+  };
+  return (
+    <Modal animationType="fade" onRequestClose={onCancel} transparent visible>
+      <ScrollView
+        contentContainerStyle={styles.modalScroll}
+        style={styles.modalScrollView}
+      >
+        <View
+          accessibilityViewIsModal
+          style={[
+            styles.modalCard,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+          ]}
+          testID="subscription-editor"
+        >
+          <Text style={[styles.cardTitle, { color: palette.text }]}>
+            {current === undefined ? 'Add subscription' : 'Edit subscription'}
+          </Text>
+          <TextInput
+            accessibilityLabel="Subscription name"
+            onChangeText={setName}
+            placeholder="Name"
+            placeholderTextColor={palette.muted}
+            style={[
+              styles.textField,
+              { borderColor: palette.border, color: palette.text },
+            ]}
+            testID="subscription-name"
+            value={name}
+          />
+          <View style={styles.inputRow}>
+            <TextInput
+              accessibilityLabel="Billing amount"
+              keyboardType="decimal-pad"
+              onChangeText={setAmount}
+              placeholder="90.00"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.textField,
+                styles.flexField,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="subscription-amount"
+              value={amount}
+            />
+            <TextInput
+              accessibilityLabel="Billing currency"
+              autoCapitalize="characters"
+              maxLength={3}
+              onChangeText={setCurrency}
+              style={[
+                styles.textField,
+                { width: 82, borderColor: palette.border, color: palette.text },
+              ]}
+              testID="subscription-currency"
+              value={currency}
+            />
+          </View>
+          <ChoiceGroup
+            label="Interval unit"
+            onSelect={setIntervalKind}
+            choices={[
+              { key: 'MONTHS', label: 'Months' },
+              { key: 'DAYS', label: 'Days' },
+            ]}
+            palette={palette}
+            selected={intervalKind}
+          />
+          <TextInput
+            accessibilityLabel={`Billing interval in ${intervalKind.toLowerCase()}`}
+            keyboardType="number-pad"
+            onChangeText={setInterval}
+            placeholder="12"
+            placeholderTextColor={palette.muted}
+            style={[
+              styles.textField,
+              { borderColor: palette.border, color: palette.text },
+            ]}
+            testID="subscription-interval"
+            value={interval}
+          />
+          <View style={styles.inputRow}>
+            <TextInput
+              accessibilityLabel="Last payment date"
+              onChangeText={setLastPayment}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.textField,
+                styles.flexField,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="subscription-last-payment"
+              value={lastPayment}
+            />
+            <TextInput
+              accessibilityLabel="Next expected renewal date"
+              onChangeText={setNextExpected}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={palette.muted}
+              style={[
+                styles.textField,
+                styles.flexField,
+                { borderColor: palette.border, color: palette.text },
+              ]}
+              testID="subscription-next-renewal"
+              value={nextExpected}
+            />
+          </View>
+          <ChoiceGroup
+            label="Renewal intent"
+            onSelect={setRenewalIntent}
+            choices={[
+              { key: 'COMMITTED', label: 'Committed' },
+              { key: 'LIKELY', label: 'Likely' },
+              { key: 'UNKNOWN', label: 'Unknown' },
+              { key: 'NOT_RENEWING', label: 'Not renewing' },
+            ]}
+            palette={palette}
+            selected={renewalIntent}
+          />
+          <ChoiceGroup
+            label="Category"
+            onSelect={setCategoryId}
+            choices={categories.map((category) => ({
+              key: category.id,
+              label: category.name,
+            }))}
+            palette={palette}
+            selected={categoryId}
+          />
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: reserveEnabled }}
+            onPress={() => setReserveEnabled((value) => !value)}
+            style={styles.checkRow}
+            testID="subscription-reserve-toggle"
+          >
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  borderColor: palette.accent,
+                  backgroundColor: reserveEnabled
+                    ? palette.accent
+                    : 'transparent',
+                },
+              ]}
+            />
+            <Text style={[styles.bodyText, { color: palette.text }]}>
+              Optional reserve plan
+            </Text>
+          </Pressable>
+          {reserveEnabled ? (
+            <>
+              <View style={styles.inputRow}>
+                <TextInput
+                  accessibilityLabel="Reserve target amount"
+                  keyboardType="decimal-pad"
+                  onChangeText={setReserveTarget}
+                  placeholder="90.00"
+                  placeholderTextColor={palette.muted}
+                  style={[
+                    styles.textField,
+                    styles.flexField,
+                    { borderColor: palette.border, color: palette.text },
+                  ]}
+                  testID="subscription-reserve-target"
+                  value={reserveTarget}
+                />
+                <TextInput
+                  accessibilityLabel="Amount already reserved"
+                  keyboardType="decimal-pad"
+                  onChangeText={setReserved}
+                  placeholder="30.00"
+                  placeholderTextColor={palette.muted}
+                  style={[
+                    styles.textField,
+                    styles.flexField,
+                    { borderColor: palette.border, color: palette.text },
+                  ]}
+                  testID="subscription-reserved"
+                  value={reserved}
+                />
+              </View>
+              <TextInput
+                accessibilityLabel="Reserve target date"
+                onChangeText={setReserveDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={palette.muted}
+                style={[
+                  styles.textField,
+                  { borderColor: palette.border, color: palette.text },
+                ]}
+                testID="subscription-reserve-date"
+                value={reserveDate}
+              />
+            </>
+          ) : null}
+          {error === null ? null : (
+            <Text accessibilityRole="alert" style={{ color: palette.breach }}>
+              {error}
+            </Text>
+          )}
+          <View style={styles.modalActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCancel}
+              style={styles.secondaryButton}
+            >
+              <Text style={[styles.smallButtonText, { color: palette.muted }]}>
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void commit()}
+              style={[styles.modalSave, { backgroundColor: palette.accent }]}
+              testID="subscription-save"
+            >
+              <Text
+                style={[styles.smallButtonText, { color: palette.accentText }]}
+              >
+                Save
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+    </Modal>
+  );
+}
+
+function formatSubscriptionInterval(
+  value: Pick<
+    SubscriptionSuggestion | SubscriptionRecord['subscription'],
+    'intervalMonths' | 'intervalDays'
+  >,
+): string {
+  return value.intervalMonths === null
+    ? `${value.intervalDays} day${value.intervalDays === 1 ? '' : 's'}`
+    : `${value.intervalMonths} month${value.intervalMonths === 1 ? '' : 's'}`;
+}
+
+function renewalIntentLabel(intent: RenewalIntent): string {
+  return {
+    COMMITTED: 'Committed',
+    LIKELY: 'Likely',
+    UNKNOWN: 'Unknown',
+    NOT_RENEWING: 'Not renewing',
+  }[intent];
+}
+
 type TrendLoadState =
   | { readonly status: 'LOADING' }
   | { readonly status: 'ERROR' }
@@ -1373,6 +2276,7 @@ function TrendsScreen({
   database,
   onExplore,
   onHome,
+  onOpenSubscriptions,
   palette,
 }: {
   readonly activeMonth: string;
@@ -1380,6 +2284,7 @@ function TrendsScreen({
   readonly database: Database;
   readonly onExplore: (filter: LedgerQuery) => void;
   readonly onHome: () => void;
+  readonly onOpenSubscriptions: () => void;
   readonly palette: Palette;
 }) {
   const [selection, setSelection] = useState<TrendSelection>({
@@ -1642,6 +2547,7 @@ function TrendsScreen({
         onBreakdown={() => onExplore(monthQuery(activeMonth))}
         onHome={onHome}
         onTrends={() => undefined}
+        onSubscriptions={onOpenSubscriptions}
         palette={palette}
       />
     </ScrollView>
@@ -2121,9 +3027,10 @@ function ExplorerScreen({
   onSearch,
   onDataChanged,
   onOpenTrends,
+  onOpenSubscriptions,
   onBack,
 }: {
-  readonly backDestination: 'HOME' | 'TRENDS';
+  readonly backDestination: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS';
   readonly database: Database;
   readonly palette: Palette;
   readonly filter: ExplorerFilter;
@@ -2134,6 +3041,7 @@ function ExplorerScreen({
   readonly onSearch: (parsed: ParsedLedgerSearch) => void;
   readonly onDataChanged: () => Promise<void>;
   readonly onOpenTrends: () => void;
+  readonly onOpenSubscriptions: () => void;
   readonly onBack: () => void;
 }) {
   const [searchText, setSearchText] = useState('');
@@ -2213,13 +3121,24 @@ function ExplorerScreen({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Back to ${backDestination === 'TRENDS' ? 'Trends' : 'Home'}`}
+        accessibilityLabel={`Back to ${
+          backDestination === 'TRENDS'
+            ? 'Trends'
+            : backDestination === 'SUBSCRIPTIONS'
+              ? 'Subscriptions'
+              : 'Home'
+        }`}
         onPress={onBack}
         style={styles.backButton}
         testID="explorer-back"
       >
         <Text style={[styles.textButtonLabel, { color: palette.accent }]}>
-          ← {backDestination === 'TRENDS' ? 'Trends' : 'Home'}
+          ←{' '}
+          {backDestination === 'TRENDS'
+            ? 'Trends'
+            : backDestination === 'SUBSCRIPTIONS'
+              ? 'Subscriptions'
+              : 'Home'}
         </Text>
       </Pressable>
       <Text style={[styles.demoPill, { color: palette.accent }]}>
@@ -2636,6 +3555,7 @@ function ExplorerScreen({
         onHome={onBack}
         onBreakdown={() => undefined}
         onTrends={onOpenTrends}
+        onSubscriptions={onOpenSubscriptions}
       />
     </ScrollView>
   );
@@ -2678,6 +3598,7 @@ function QueryChips({
 
 type FilterKind =
   | 'DATE'
+  | 'SUBSCRIPTION'
   | 'SUPER_CATEGORY'
   | 'CATEGORY'
   | 'EVENT_TYPE'
@@ -2700,6 +3621,20 @@ function queryChipLabels(
             ? `Day ${filter.date.date}`
             : `${filter.date.startDate} to ${filter.date.endDate}`,
     },
+    ...(filter.subscriptionId === undefined
+      ? []
+      : [
+          {
+            kind: 'SUBSCRIPTION' as const,
+            label: 'Linked subscription payments',
+          },
+        ]),
+    ...(filter.subscriptionStatuses === undefined
+      ? []
+      : filter.subscriptionStatuses.map((status) => ({
+          kind: 'SUBSCRIPTION' as const,
+          label: `Subscription ${status.toLowerCase().replaceAll('_', ' ')}`,
+        }))),
     ...(filter.superCategories ?? []).map((key) => ({
       kind: 'SUPER_CATEGORY' as const,
       label: { LIVING: 'Living', SAVING: 'Saving', FUN: 'Fun' }[key],
@@ -2754,7 +3689,10 @@ function removeFilter(filter: LedgerQuery, kind: FilterKind): LedgerQuery {
   if (kind === 'DATE') {
     return { ...next, date: { kind: 'MONTH', month: '2026-09' } };
   }
-  if (kind === 'SUPER_CATEGORY') {
+  if (kind === 'SUBSCRIPTION') {
+    delete next.subscriptionId;
+    delete next.subscriptionStatuses;
+  } else if (kind === 'SUPER_CATEGORY') {
     delete next.superCategories;
   } else if (kind === 'CATEGORY') {
     delete next.categoryIds;
@@ -3761,12 +4699,14 @@ function CoreNavigation({
   onHome,
   onBreakdown,
   onTrends,
+  onSubscriptions,
 }: {
-  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS';
+  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS' | 'SUBSCRIPTIONS';
   readonly palette: Palette;
   readonly onHome: () => void;
   readonly onBreakdown: () => void;
   readonly onTrends: () => void;
+  readonly onSubscriptions: () => void;
 }) {
   return (
     <View
@@ -3794,7 +4734,12 @@ function CoreNavigation({
         palette={palette}
         onPress={onTrends}
       />
-      <Destination label="Subscriptions" palette={palette} />
+      <Destination
+        label="Subscriptions"
+        active={active === 'SUBSCRIPTIONS'}
+        palette={palette}
+        onPress={onSubscriptions}
+      />
     </View>
   );
 }
@@ -4215,6 +5160,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     gap: 4,
+  },
+  subscriptionSummary: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+  },
+  subscriptionCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+  },
+  subscriptionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   ringContainer: {
     width: RING_SIZE,
