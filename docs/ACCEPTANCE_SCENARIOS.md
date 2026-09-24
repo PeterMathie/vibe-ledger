@@ -454,3 +454,50 @@ Expected:
 - £55 + £14.99 is rejected with a visible £0.01 remainder;
 - amounts are conserved in integer minor units;
 - restart preserves the raw parent and exact split children.
+
+---
+
+## M. Experimental Money Map
+
+### M1. Plan
+
+Select September 2026 and Plan.
+
+Expected:
+
+- source = stored £3,000 budget base;
+- Living / Saving / Fun streams = stored £1,500 / £900 / £600 targets;
+- the view does not infer category-level targets that are not stored.
+
+### M2. Actual
+
+Select Actual.
+
+Expected:
+
+- Living and Fun show included spending;
+- Saving shows gross saving contributions;
+- excluded events do not enter a stream;
+- net savings movement is printed as a separate secondary metric.
+
+### M3. Refund and runover
+
+Expected:
+
+- negative category activity is labelled as a refund/reimbursement offset and
+  rendered in a separate direction with non-negative geometry;
+- actuals above target retain the budget-base scale and visible overflow;
+- a zero target prints "No target set" without dividing by zero;
+- extreme activity uses bounded view nodes rather than one node per target
+  multiple.
+
+### M4. Drill-down and accessibility
+
+Expected:
+
+- selecting a super-category opens Explorer with exact month +
+  super-category + INCLUDED scope;
+- selecting a category opens Explorer with exact month + category + INCLUDED
+  scope;
+- exact amounts and semantic measure labels are available as a textual table;
+- currencies remain separate and are never summed through implicit FX.

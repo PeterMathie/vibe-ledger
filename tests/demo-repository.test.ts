@@ -169,6 +169,7 @@ describe('synthetic Demo Data repository', () => {
     expect(resolutionIds).not.toContain('test:usd');
     expect(resolutionIds).toContain('demo:aug-cinema');
     expect(currentIds).not.toContain('demo:aug-cinema');
+    expect(snapshot.currencies).toEqual(['GBP', 'USD']);
   });
 
   it('persists allocation only for the open month and preserves history', async () => {

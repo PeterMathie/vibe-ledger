@@ -24,6 +24,7 @@ import {
   runoverRow,
 } from './src/app/allocation';
 import { createMonthlyHeatMap, type MonthlyHeatMap } from './src/app/heat-map';
+import { createMoneyMapModel, type MoneyMapMode } from './src/app/money-map';
 import type { ExplorerFilter } from './src/app/view-models';
 import {
   createExplorerViewModel,
@@ -119,12 +120,13 @@ type Screen =
   | { readonly name: 'HOME' }
   | { readonly name: 'TRENDS' }
   | { readonly name: 'SUBSCRIPTIONS' }
+  | { readonly name: 'MONEY_MAP' }
   | {
       readonly name: 'EXPLORER';
       readonly filter: ExplorerFilter;
       readonly currency: string;
       readonly unrecognizedTokens: readonly string[];
-      readonly returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS';
+      readonly returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP';
     };
 
 type QueryLoadState =
@@ -284,7 +286,7 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       unrecognizedTokens: readonly string[] = [],
-      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' = 'HOME',
+      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP' = 'HOME',
     ) => {
       if (database === null) {
         return;
@@ -337,7 +339,7 @@ export default function App() {
       filter: ExplorerFilter,
       currency: string,
       month: string,
-      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS',
+      returnTo: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP',
     ) => {
       if (database === null) {
         return;
@@ -419,6 +421,7 @@ export default function App() {
           onExplore={(filter) => openExplorer(filter, budget.currency)}
           onOpenTrends={() => setScreen({ name: 'TRENDS' })}
           onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          onOpenMoneyMap={() => setScreen({ name: 'MONEY_MAP' })}
           onUpdateAllocation={updateAllocation}
           onReset={resetDemo}
         />
@@ -459,6 +462,25 @@ export default function App() {
           }
           palette={palette}
         />
+      ) : screen.name === 'MONEY_MAP' ? (
+        <MoneyMapScreen
+          budget={budget}
+          transactions={transactions}
+          resolutionTransactions={snapshot.ledgerMonth.resolutionTransactions}
+          months={snapshot.months}
+          activeMonth={snapshot.activeMonth ?? budget.monthKey}
+          otherCurrencies={snapshot.currencies.filter(
+            (currency) => currency !== budget.currency,
+          )}
+          onSelectMonth={selectMonth}
+          onExplore={(filter) =>
+            openExplorer(filter, budget.currency, [], 'MONEY_MAP')
+          }
+          onHome={() => setScreen({ name: 'HOME' })}
+          onOpenTrends={() => setScreen({ name: 'TRENDS' })}
+          onOpenSubscriptions={() => setScreen({ name: 'SUBSCRIPTIONS' })}
+          palette={palette}
+        />
       ) : queryState.status === 'READY' ? (
         <ExplorerScreen
           backDestination={screen.returnTo}
@@ -495,7 +517,9 @@ export default function App() {
                 ? { name: 'TRENDS' }
                 : screen.returnTo === 'SUBSCRIPTIONS'
                   ? { name: 'SUBSCRIPTIONS' }
-                  : { name: 'HOME' },
+                  : screen.returnTo === 'MONEY_MAP'
+                    ? { name: 'MONEY_MAP' }
+                    : { name: 'HOME' },
             );
             setQueryState({ status: 'IDLE' });
           }}
@@ -573,6 +597,7 @@ function HomeScreen({
   onExplore,
   onOpenTrends,
   onOpenSubscriptions,
+  onOpenMoneyMap,
   onUpdateAllocation,
   onReset,
 }: {
@@ -589,6 +614,7 @@ function HomeScreen({
   readonly onExplore: (filter: ExplorerFilter) => void;
   readonly onOpenTrends: () => void;
   readonly onOpenSubscriptions: () => void;
+  readonly onOpenMoneyMap: () => void;
   readonly onUpdateAllocation: (
     monthKey: string,
     currency: string,
@@ -897,6 +923,29 @@ function HomeScreen({
         onSelectDate={(date) => onExplore(dayQuery(date))}
         palette={palette}
       />
+      <Text style={[styles.sectionKicker, { color: palette.accent }]}>
+        EXPERIMENTAL
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open Experimental Money Map"
+        onPress={onOpenMoneyMap}
+        style={[
+          styles.experimentalEntry,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID="open-money-map"
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.cardTitle, { color: palette.text }]}>
+            Money Map
+          </Text>
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            Trace this month from budget base to allocations and categories.
+          </Text>
+        </View>
+        <Badge label="Experimental" palette={palette} emphasized />
+      </Pressable>
       <CoreNavigation
         active="HOME"
         palette={palette}
@@ -2270,6 +2319,398 @@ type TrendLoadState =
   | { readonly status: 'ERROR' }
   | { readonly status: 'READY'; readonly result: TrendQueryResult };
 
+function MoneyMapScreen({
+  budget,
+  transactions,
+  resolutionTransactions,
+  months,
+  activeMonth,
+  otherCurrencies,
+  onSelectMonth,
+  onExplore,
+  onHome,
+  onOpenTrends,
+  onOpenSubscriptions,
+  palette,
+}: {
+  readonly budget: NonNullable<LedgerSnapshot['ledgerMonth']>['budget'];
+  readonly transactions: NonNullable<
+    LedgerSnapshot['ledgerMonth']
+  >['transactions'];
+  readonly resolutionTransactions: NonNullable<
+    LedgerSnapshot['ledgerMonth']
+  >['resolutionTransactions'];
+  readonly months: readonly string[];
+  readonly activeMonth: string;
+  readonly otherCurrencies: readonly string[];
+  readonly onSelectMonth: (month: string) => void;
+  readonly onExplore: (filter: LedgerQuery) => void;
+  readonly onHome: () => void;
+  readonly onOpenTrends: () => void;
+  readonly onOpenSubscriptions: () => void;
+  readonly palette: Palette;
+}) {
+  const [mode, setMode] = useState<MoneyMapMode>('PLAN');
+  const model = useMemo(
+    () =>
+      createMoneyMapModel(
+        mode,
+        budget,
+        transactions,
+        resolutionTransactions,
+        otherCurrencies,
+      ),
+    [budget, mode, otherCurrencies, resolutionTransactions, transactions],
+  );
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      testID="money-map-screen"
+    >
+      <View style={styles.topRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.demoPill, { color: palette.warning }]}>
+            EXPERIMENTAL · NOT A PRIMARY DESTINATION
+          </Text>
+          <Text style={[styles.screenTitle, { color: palette.text }]}>
+            Money Map
+          </Text>
+          <Text style={[styles.bodyText, { color: palette.muted }]}>
+            A proportional view of stored targets and canonical budget activity.
+            It does not create new accounting meaning.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.monthRow}>
+        {months.map((month) => (
+          <Pressable
+            key={month}
+            accessibilityRole="button"
+            accessibilityState={{ selected: month === activeMonth }}
+            onPress={() => onSelectMonth(month)}
+            style={[
+              styles.monthButton,
+              {
+                backgroundColor:
+                  month === activeMonth ? palette.accent : palette.surfaceMuted,
+              },
+            ]}
+            testID={`money-map-month-${month}`}
+          >
+            <Text
+              style={{
+                color:
+                  month === activeMonth ? palette.accentText : palette.text,
+                fontWeight: '700',
+              }}
+            >
+              {month}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View
+        accessibilityLabel="Money Map view"
+        style={[
+          styles.moneyMapControls,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+      >
+        <View style={styles.trendChipRow}>
+          <FilterButton
+            active={mode === 'PLAN'}
+            label="Plan"
+            onPress={() => setMode('PLAN')}
+            palette={palette}
+            testID="money-map-plan"
+          />
+          <FilterButton
+            active={mode === 'ACTUAL'}
+            label="Actual"
+            onPress={() => setMode('ACTUAL')}
+            palette={palette}
+            testID="money-map-actual"
+          />
+        </View>
+        <Text style={[styles.smallText, { color: palette.muted }]}>
+          {model.currency} only · no FX mixing · one full source width equals
+          the {model.budgetBaseLabel} budget base.
+        </Text>
+      </View>
+
+      {model.otherCurrencies.length === 0 ? null : (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.notice,
+            {
+              backgroundColor: palette.surfaceMuted,
+              borderColor: palette.border,
+            },
+          ]}
+          testID="money-map-currency-partition"
+        >
+          <Text style={[styles.bodyText, { color: palette.text }]}>
+            {model.otherCurrencies.join(', ')} activity is stored separately and
+            is not added to this {model.currency} map.
+          </Text>
+        </View>
+      )}
+
+      <View
+        style={[
+          styles.moneyMapPanel,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID={`money-map-${mode.toLowerCase()}-flow`}
+      >
+        <View style={styles.moneyMapSourceRow}>
+          <View
+            style={[
+              styles.moneyMapSource,
+              { backgroundColor: palette.surfaceMuted },
+            ]}
+          >
+            <Text style={[styles.label, { color: palette.muted }]}>
+              BUDGET BASE
+            </Text>
+            <Text style={[styles.cardAmount, { color: palette.text }]}>
+              {model.budgetBaseLabel}
+            </Text>
+          </View>
+        </View>
+        {model.branches.map((branch) => {
+          const identity = categoryColor(branch.key, palette);
+          const breached =
+            mode === 'ACTUAL' && branch.overflowBasisPoints > 10_000;
+          const offset = mode === 'ACTUAL' && branch.amountMinor < 0;
+          return (
+            <View
+              key={branch.key}
+              style={[
+                styles.moneyMapBranch,
+                { borderTopColor: palette.border },
+              ]}
+              testID={`money-map-branch-${branch.key.toLowerCase()}`}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${branch.label}, ${branch.measureLabel}, ${branch.amountLabel}, target ${branch.targetLabel}, ${branch.statusLabel}. Open exact month Breakdown.`}
+                onPress={() => onExplore(branch.drillDown)}
+                style={styles.moneyMapBranchHeader}
+                testID={`money-map-node-${branch.key.toLowerCase()}`}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cardTitle, { color: identity }]}>
+                    {branch.label}
+                  </Text>
+                  <Text style={[styles.smallText, { color: palette.muted }]}>
+                    {branch.measureLabel} · {branch.statusLabel}
+                  </Text>
+                </View>
+                <View style={styles.breakdownAmount}>
+                  <Text
+                    style={[
+                      styles.cardAmount,
+                      {
+                        color: breached
+                          ? palette.breach
+                          : offset
+                            ? palette.warning
+                            : palette.text,
+                      },
+                    ]}
+                  >
+                    {branch.amountLabel}
+                  </Text>
+                  <Text style={[styles.smallText, { color: palette.muted }]}>
+                    target {branch.targetLabel}
+                  </Text>
+                </View>
+              </Pressable>
+              <ScrollView
+                accessibilityLabel={`${branch.label} proportional stream`}
+                horizontal
+                showsHorizontalScrollIndicator={breached}
+              >
+                <View
+                  style={[
+                    styles.moneyMapFlow,
+                    {
+                      width: Math.max(2, branch.width),
+                      backgroundColor: breached
+                        ? palette.breach
+                        : offset
+                          ? palette.warning
+                          : identity,
+                    },
+                  ]}
+                  testID={`money-map-stream-${branch.key.toLowerCase()}`}
+                />
+              </ScrollView>
+              {mode === 'PLAN' ? (
+                <Text style={[styles.smallText, { color: palette.muted }]}>
+                  No category targets are stored, so this plan stream is not
+                  split into invented subcategory budgets.
+                </Text>
+              ) : (
+                <View style={styles.moneyMapCategories}>
+                  {branch.categories.length === 0 ? (
+                    <Text style={[styles.smallText, { color: palette.muted }]}>
+                      No included category activity.
+                    </Text>
+                  ) : (
+                    branch.categories.map((category) => (
+                      <Pressable
+                        key={category.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${category.label}, ${category.amountLabel}, ${
+                          category.direction === 'OFFSET'
+                            ? 'refund or reimbursement offset'
+                            : category.direction === 'ZERO'
+                              ? 'net zero category activity'
+                              : branch.measureLabel
+                        }. Open exact month category Breakdown.`}
+                        onPress={() => onExplore(category.drillDown)}
+                        style={styles.moneyMapCategoryRow}
+                        testID={`money-map-category-${category.id.replace(':', '-')}`}
+                      >
+                        <View style={styles.moneyMapCategoryHeader}>
+                          <View style={styles.moneyMapCategoryLabel}>
+                            <Text
+                              style={[
+                                styles.bodyTextStrong,
+                                { color: palette.text },
+                              ]}
+                            >
+                              {category.direction === 'OFFSET'
+                                ? '← '
+                                : category.direction === 'ZERO'
+                                  ? '↔ '
+                                  : '→ '}
+                              {category.label}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.smallText,
+                                {
+                                  color:
+                                    category.direction === 'OFFSET'
+                                      ? palette.warning
+                                      : palette.muted,
+                                },
+                              ]}
+                            >
+                              {category.direction === 'OFFSET'
+                                ? 'Refund / reimbursement offset'
+                                : category.direction === 'ZERO'
+                                  ? 'Net zero category activity'
+                                  : branch.measureLabel}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.bodyTextStrong,
+                              { color: palette.text },
+                            ]}
+                          >
+                            {category.amountLabel}
+                          </Text>
+                        </View>
+                        <ScrollView
+                          horizontal
+                          importantForAccessibility="no-hide-descendants"
+                          pointerEvents="none"
+                          showsHorizontalScrollIndicator={false}
+                        >
+                          <View
+                            style={[
+                              styles.moneyMapCategoryFlow,
+                              {
+                                width: Math.max(2, category.width),
+                                backgroundColor:
+                                  category.direction === 'OFFSET'
+                                    ? palette.warning
+                                    : category.direction === 'ZERO'
+                                      ? palette.muted
+                                      : identity,
+                              },
+                            ]}
+                          />
+                        </ScrollView>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+
+      <View
+        style={[
+          styles.moneyMapNet,
+          { backgroundColor: palette.surface, borderColor: palette.warning },
+        ]}
+        testID="money-map-net-savings"
+      >
+        <View>
+          <Text style={[styles.label, { color: palette.warning }]}>
+            SEPARATE METRIC
+          </Text>
+          <Text style={[styles.bodyTextStrong, { color: palette.text }]}>
+            Net savings movement
+          </Text>
+        </View>
+        <Text style={[styles.cardAmount, { color: palette.text }]}>
+          {model.netSavingsMovementLabel}
+        </Text>
+        <Text style={[styles.smallText, { color: palette.muted }]}>
+          Contributions minus withdrawals. Never merged into the Saving
+          contribution stream.
+        </Text>
+      </View>
+
+      <View
+        accessibilityLabel="Money Map exact values table"
+        style={[
+          styles.moneyMapTable,
+          { backgroundColor: palette.surface, borderColor: palette.border },
+        ]}
+        testID="money-map-text-alternative"
+      >
+        <Text style={[styles.sectionTitle, { color: palette.text }]}>
+          Exact values
+        </Text>
+        {model.accessibilityRows.map((row, index) => (
+          <Text
+            key={`${index}:${row}`}
+            style={[
+              styles.moneyMapTableRow,
+              { color: palette.text, borderTopColor: palette.border },
+            ]}
+          >
+            {row}
+          </Text>
+        ))}
+      </View>
+
+      <CoreNavigation
+        active="NONE"
+        onBreakdown={() => onExplore(monthQuery(budget.monthKey))}
+        onHome={onHome}
+        onSubscriptions={onOpenSubscriptions}
+        onTrends={onOpenTrends}
+        palette={palette}
+      />
+    </ScrollView>
+  );
+}
+
 function TrendsScreen({
   activeMonth,
   currency,
@@ -3030,7 +3471,7 @@ function ExplorerScreen({
   onOpenSubscriptions,
   onBack,
 }: {
-  readonly backDestination: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS';
+  readonly backDestination: 'HOME' | 'TRENDS' | 'SUBSCRIPTIONS' | 'MONEY_MAP';
   readonly database: Database;
   readonly palette: Palette;
   readonly filter: ExplorerFilter;
@@ -3126,7 +3567,9 @@ function ExplorerScreen({
             ? 'Trends'
             : backDestination === 'SUBSCRIPTIONS'
               ? 'Subscriptions'
-              : 'Home'
+              : backDestination === 'MONEY_MAP'
+                ? 'Money Map'
+                : 'Home'
         }`}
         onPress={onBack}
         style={styles.backButton}
@@ -3138,7 +3581,9 @@ function ExplorerScreen({
             ? 'Trends'
             : backDestination === 'SUBSCRIPTIONS'
               ? 'Subscriptions'
-              : 'Home'}
+              : backDestination === 'MONEY_MAP'
+                ? 'Money Map'
+                : 'Home'}
         </Text>
       </Pressable>
       <Text style={[styles.demoPill, { color: palette.accent }]}>
@@ -4701,7 +5146,7 @@ function CoreNavigation({
   onTrends,
   onSubscriptions,
 }: {
-  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS' | 'SUBSCRIPTIONS';
+  readonly active: 'HOME' | 'BREAKDOWN' | 'TRENDS' | 'SUBSCRIPTIONS' | 'NONE';
   readonly palette: Palette;
   readonly onHome: () => void;
   readonly onBreakdown: () => void;
@@ -5047,6 +5492,15 @@ const styles = StyleSheet.create({
   bodyText: { fontSize: 15, lineHeight: 21 },
   bodyTextStrong: { fontSize: 15, lineHeight: 21, fontWeight: '800' },
   notice: { borderWidth: 1, borderRadius: 12, padding: 14 },
+  experimentalEntry: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   sectionKicker: {
     marginTop: 10,
     fontSize: 11,
@@ -5407,6 +5861,76 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     gap: 10,
+  },
+  moneyMapControls: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  moneyMapPanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  moneyMapSourceRow: { padding: 16 },
+  moneyMapSource: {
+    minHeight: 72,
+    borderRadius: 14,
+    padding: 14,
+    justifyContent: 'center',
+  },
+  moneyMapBranch: {
+    borderTopWidth: 1,
+    padding: 16,
+    gap: 10,
+  },
+  moneyMapBranchHeader: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  moneyMapFlow: {
+    height: 18,
+    minWidth: 2,
+    borderRadius: 4,
+  },
+  moneyMapCategories: { gap: 2 },
+  moneyMapCategoryRow: {
+    minHeight: 52,
+    justifyContent: 'center',
+    gap: 12,
+  },
+  moneyMapCategoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  moneyMapCategoryLabel: { flex: 1 },
+  moneyMapCategoryFlow: {
+    height: 7,
+    minWidth: 2,
+    borderRadius: 3,
+  },
+  moneyMapNet: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+  },
+  moneyMapTable: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 4,
+  },
+  moneyMapTableRow: {
+    borderTopWidth: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
   },
   trendChipRow: {
     flexDirection: 'row',

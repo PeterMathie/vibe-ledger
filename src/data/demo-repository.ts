@@ -46,6 +46,7 @@ export interface LedgerMonth {
 export interface LedgerSnapshot {
   readonly isDemoLoaded: boolean;
   readonly months: readonly string[];
+  readonly currencies: readonly string[];
   readonly activeMonth: string | null;
   readonly ledgerMonth: LedgerMonth | null;
 }
@@ -470,7 +471,14 @@ export async function loadLedgerSnapshot(
   const monthRows = await database.getAllAsync<{ month_key: string }>(
     'SELECT month_key FROM monthly_budgets ORDER BY month_key DESC;',
   );
+  const currencyRows = await database.getAllAsync<{ currency: string }>(
+    `SELECT DISTINCT currency
+     FROM raw_transactions
+     WHERE source_deleted = 0
+     ORDER BY currency;`,
+  );
   const months = monthRows.map(({ month_key }) => month_key);
+  const currencies = currencyRows.map(({ currency }) => currency);
   const activeMonth =
     requestedMonth !== undefined && months.includes(requestedMonth)
       ? requestedMonth
@@ -480,6 +488,7 @@ export async function loadLedgerSnapshot(
     return {
       isDemoLoaded: state?.fixture_version === DEMO_FIXTURE_VERSION,
       months,
+      currencies,
       activeMonth: null,
       ledgerMonth: null,
     };
@@ -488,6 +497,7 @@ export async function loadLedgerSnapshot(
   return {
     isDemoLoaded: state?.fixture_version === DEMO_FIXTURE_VERSION,
     months,
+    currencies,
     activeMonth,
     ledgerMonth: await loadLedgerMonth(database, activeMonth),
   };
