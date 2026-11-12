@@ -14,6 +14,7 @@ AI may be used to **build** Vibe Ledger; a generative-AI dependency is not a pro
 2. [Documentation Standards](docs/00-workflow/DOCUMENTATION_STANDARDS.md) — define once/reference everywhere, traceability, backlinks and validation.
 3. [Ownership Map](docs/00-workflow/OWNERSHIP_MAP.md) — where each concept's authoritative definition lives.
 4. Read **task-specific owners** and their dependencies. Core current owners include:
+   - [Design Philosophy](docs/01-philosophy/DESIGN_PHILOSOPHY.md) — visual hierarchy, interaction principles and design judgement.
    - [Money Model](docs/MONEY_MODEL.md) — financial semantics and invariants.
    - [Product Specification](docs/PRODUCT_SPEC.md) — current scope, pending migration.
    - [Data Model](docs/DATA_MODEL.md) — logical schema and persistence.

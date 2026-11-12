@@ -478,4 +478,5 @@ The beta succeeds if the user can:
 - [README.md](<../README.md>)
 - [docs/00-workflow/AI_WORKFLOW.md](<00-workflow/AI_WORKFLOW.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+- [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
 <!-- GENERATED: BACKLINKS END -->

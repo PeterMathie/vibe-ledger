@@ -19,6 +19,7 @@ The machine-checkable section below is deliberately simple. The documentation ch
 | --- | --- | --- |
 | `docs.standards` | `docs/00-workflow/DOCUMENTATION_STANDARDS.md` | Documentation conventions, validation and information-web rules |
 | `docs.ownership` | `docs/00-workflow/OWNERSHIP_MAP.md` | Mapping concepts to their authoritative documents |
+| `design.philosophy` | `docs/01-philosophy/DESIGN_PHILOSOPHY.md` | Cross-cutting interaction and visual design principles |
 | `agents.workflow` | `docs/00-workflow/AI_WORKFLOW.md` | Autonomous agent lifecycle, permissions, verification, merging and release boundaries |
 | `product.definition` | `docs/PRODUCT_SPEC.md` | Product aims, scope and primary capabilities |
 | `product.navigation-legacy` | `docs/PRODUCT_SPEC.md` | Existing navigation specification; pending page-level migration |
@@ -32,13 +33,14 @@ The machine-checkable section below is deliberately simple. The documentation ch
 | `agents.entrypoint` | `AGENTS.md` | Agent navigation entry point; links to the owning operational and product specifications |
 <!-- OWNERSHIP:END -->
 
+The cross-cutting principles are now defined in [Design Philosophy](../01-philosophy/DESIGN_PHILOSOPHY.md). Specific visual values and component behaviours retain separate owners.
+
 ## Planned ownership transfers
 
 These are **future destinations, not active owners**. The files may not exist yet and therefore do not appear in the validated table.
 
 | Responsibility | Planned destination |
 | --- | --- |
-| Product/design philosophy | `docs/01-philosophy/DESIGN_PHILOSOPHY.md` |
 | Design tokens and visual rules | `design-tokens/tokens.json`, `docs/03-design-system/` |
 | Reusable component contracts | `docs/04-components/` (extensible; not an exhaustive inventory) |
 | Home page behaviour | `docs/05-pages/home/FUNCTIONAL.md` |
@@ -75,4 +77,5 @@ This document is **draft** until existing specifications have been reconciled; m
 - [README.md](<../../README.md>)
 - [docs/00-workflow/AI_WORKFLOW.md](<AI_WORKFLOW.md>)
 - [docs/00-workflow/DOCUMENTATION_STANDARDS.md](<DOCUMENTATION_STANDARDS.md>)
+- [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<../01-philosophy/DESIGN_PHILOSOPHY.md>)
 <!-- GENERATED: BACKLINKS END -->

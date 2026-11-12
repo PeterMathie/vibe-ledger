@@ -278,4 +278,5 @@ Minimal.
 
 - [README.md](<../README.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+- [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
 <!-- GENERATED: BACKLINKS END -->
