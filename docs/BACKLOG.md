@@ -268,3 +268,9 @@ Recommended critical path:
 ```
 
 The Monzo integration deliberately comes after the semantic engine and fixture-driven app.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+<!-- GENERATED: BACKLINKS END -->

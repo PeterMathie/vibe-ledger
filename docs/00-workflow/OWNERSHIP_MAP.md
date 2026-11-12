@@ -67,3 +67,9 @@ A transfer is complete only after the new owner exists, requirements and accepta
 - Run `python3 tools/check_docs.py` after any change to documentation structure or ownership.
 
 This document is **draft** until existing specifications have been reconciled; mechanical validation can start before all migrations are complete.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [docs/00-workflow/DOCUMENTATION_STANDARDS.md](<DOCUMENTATION_STANDARDS.md>)
+<!-- GENERATED: BACKLINKS END -->

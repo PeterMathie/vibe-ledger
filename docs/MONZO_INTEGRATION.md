@@ -154,3 +154,9 @@ Therefore:
 - keep raw transaction payloads out of logs in production builds;
 - provide a local data wipe;
 - if a broker exists, minimise retained data and document it.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+<!-- GENERATED: BACKLINKS END -->

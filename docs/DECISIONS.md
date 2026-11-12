@@ -42,3 +42,9 @@
 - Whether subscription reserves should integrate into Living actuals.
 - Whether more than three super-categories are useful.
 - Whether payday-to-payday periods are preferable to calendar months.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->

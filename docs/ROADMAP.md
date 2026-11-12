@@ -95,3 +95,9 @@ Evaluate whether it earns a permanent dashboard position.
 - funding-source provenance;
 - investment portfolio performance;
 - social features.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+<!-- GENERATED: BACKLINKS END -->

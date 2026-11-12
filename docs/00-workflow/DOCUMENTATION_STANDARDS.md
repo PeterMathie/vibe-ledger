@@ -6,7 +6,7 @@
 
 > **Core principle: Define once, reference everywhere.** Documentation is an information web, not a collection of independent Markdown files.
 
-This document describes the **intended standard**. A transitional [ownership map](OWNERSHIP_MAP.md), initial [structural checker](../../tools/check_docs.py), its tests and [GitHub Actions workflow](../../.github/workflows/docs-validation.yml) are implemented on the documentation branch. Automated backlink insertion, the full planned validation coverage, issue automation and migration of legacy specifications remain future work.
+This document describes the **intended standard**. A transitional [ownership map](OWNERSHIP_MAP.md), initial [structural checker](../../tools/check_docs.py), its tests and [GitHub Actions workflow](../../.github/workflows/docs-validation.yml) are implemented on the documentation branch. Backlink generation and stale-output validation are implemented. Broader validation coverage, issue automation and legacy-specification migration remain future work.
 
 ## 1. Purpose and scope
 
@@ -189,7 +189,7 @@ Outgoing links are authored. Incoming links SHOULD be generated from actual refe
 
 ### 7.3 Mechanical maintenance
 
-A future scanner SHOULD generate a dependency index and backlinks, identify broken links and orphaned specifications, and provide queries such as:
+The checker can now generate backlinks and report incoming references. Future dependency indexes and impact-analysis tooling SHOULD additionally support queries such as:
 
 - Which pages depend on BudgetProgress?
 - Which consumers depend on a particular design token or financial rule?
@@ -318,7 +318,7 @@ AI-assisted semantic analysis MAY flag possible contradictions, ambiguous criter
 
 Checks should explain how to fix failures. Agents MUST NOT disable or weaken required checks merely to merge.
 
-**Implementation status:** The initial [checker](../../tools/check_docs.py) currently verifies Markdown links and anchors, selected stable IDs, and ownership-map entries. CI runs the checker and its regression tests. `python3 tools/check_docs.py --report-backlinks` prints detected incoming links but does **not yet write generated backlink sections**. Semantic contradiction detection, full requirement traceability and automatic backlink maintenance remain to be implemented.
+**Implementation status:** The initial [checker](../../tools/check_docs.py) currently verifies Markdown links and anchors, selected stable IDs, and ownership-map entries. CI runs the checker and its regression tests and fails when generated backlinks are stale. `python3 tools/check_docs.py --write-backlinks` writes or refreshes backlink sections; `--report-backlinks` lists incoming references without editing files. Semantic contradiction detection, full requirement traceability and automatic commits of generated changes remain future work; agents run the writer before committing.
 
 ## 14. Controlled deprecation and migration
 
@@ -382,10 +382,16 @@ Implementation can proceed incrementally:
 1. Establish `OWNERSHIP_MAP.md` and document templates.
 2. Migrate legacy specifications without losing their requirements.
 3. Implement link, ID and ownership validation.
-4. Generate backlinks and dependency indexes.
+4. Regenerate backlinks and develop richer dependency indexes.
 5. Add CI enforcement and review-ticket automation.
 6. Evolve towards automatically assembled agent context.
 
 Use the existing checker for the rules it currently supports. Agents must still manually assess semantic consistency, uncovered dependencies, and any rules not yet automated; they must not claim full enforcement.
 
 **Status:** This remains a draft until reviewed and promoted to Active. The `main` branch is not changed by committing it on `docs/ai-workflow-rebuild`.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [docs/00-workflow/OWNERSHIP_MAP.md](<OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->
