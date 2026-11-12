@@ -13,9 +13,20 @@ Vibe Ledger exists to answer a small set of questions clearly:
 
 The app deliberately does **not** try to replace Monzo as a bank, become an investment tracker, provide AI financial advice, or reconstruct the philosophical provenance of every pound after money has been moved between accounts.
 
-## Build documents
+## Working on Vibe Ledger
 
-Read these in order:
+For AI-assisted development, start with [AGENTS.md](AGENTS.md), the
+[AI workflow](docs/00-workflow/AI_WORKFLOW.md),
+[documentation standards](docs/00-workflow/DOCUMENTATION_STANDARDS.md)
+and [central ownership map](docs/00-workflow/OWNERSHIP_MAP.md).
+Follow the relevant authoritative owners and their dependencies rather than
+assuming a universal precedence order.
+
+## Existing product documents
+
+The following are useful existing specifications and plans. Some are being
+migrated to the new responsibility-based hierarchy; this list is **not** an
+authority ranking:
 
 1. [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — product scope, screens and behaviour.
 2. [`docs/MONEY_MODEL.md`](docs/MONEY_MODEL.md) — the canonical semantics for income, spending, saving and transfers.
