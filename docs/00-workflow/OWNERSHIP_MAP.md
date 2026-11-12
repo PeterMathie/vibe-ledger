@@ -19,6 +19,7 @@ The machine-checkable section below is deliberately simple. The documentation ch
 | --- | --- | --- |
 | `docs.standards` | `docs/00-workflow/DOCUMENTATION_STANDARDS.md` | Documentation conventions, validation and information-web rules |
 | `docs.ownership` | `docs/00-workflow/OWNERSHIP_MAP.md` | Mapping concepts to their authoritative documents |
+| `agents.workflow` | `docs/00-workflow/AI_WORKFLOW.md` | Autonomous agent lifecycle, permissions, verification, merging and release boundaries |
 | `product.definition` | `docs/PRODUCT_SPEC.md` | Product aims, scope and primary capabilities |
 | `product.navigation-legacy` | `docs/PRODUCT_SPEC.md` | Existing navigation specification; pending page-level migration |
 | `finance.semantics` | `docs/MONEY_MODEL.md` | Money concepts, calculations and financial invariants |
@@ -28,7 +29,7 @@ The machine-checkable section below is deliberately simple. The documentation ch
 | `ux.design-legacy` | `docs/UX_SPEC.md` | Existing UX and visual composition; pending design-system/page migration |
 | `delivery.roadmap` | `docs/ROADMAP.md` | Planned phases and sequencing |
 | `delivery.backlog` | `docs/BACKLOG.md` | Legacy implementation task breakdown |
-| `agents.guidance-legacy` | `AGENTS.md` | Existing agent instructions; pending reconciliation with AI workflow |
+| `agents.entrypoint` | `AGENTS.md` | Agent navigation entry point; links to the owning operational and product specifications |
 <!-- OWNERSHIP:END -->
 
 ## Planned ownership transfers
@@ -44,14 +45,13 @@ These are **future destinations, not active owners**. The files may not exist ye
 | Other page-specific behaviour | `docs/05-pages/<page>/FUNCTIONAL.md` |
 | Page composition | `docs/05-pages/<page>/DESIGN.md` |
 | Flutter technical contracts | `docs/06-engineering/` |
-| Autonomous implementation and merging | `docs/00-workflow/AI_WORKFLOW.md` |
 | Cross-feature testing strategy | `docs/07-quality/` |
 
 A transfer is complete only after the new owner exists, requirements and acceptance criteria are migrated, the active entry is updated and dependent references are repaired.
 
 ## Known migration concerns
 
-1. **Conflicting authority rules:** [AGENTS.md](../../AGENTS.md) currently specifies a global source-of-truth order. The new standard adopts ownership-based authority. Reconcile these rules when writing `AI_WORKFLOW.md`; do not assume both can remain normative.
+1. **Agent authority rule reconciled:** [AGENTS.md](../../AGENTS.md) now delegates workflow authority to [AI_WORKFLOW.md](AI_WORKFLOW.md) and uses ownership-based document authority. Existing product and UX specifications still need content-by-content migration.
 2. **Financial examples:** [ACCEPTANCE_SCENARIOS.md](../ACCEPTANCE_SCENARIOS.md) calls itself executable product truth. Under the new structure, financial definitions belong in the [Money Model](../MONEY_MODEL.md), with requirement-level acceptance criteria next to requirements. Migrate and cross-link examples without changing financial semantics silently.
 3. **UX and feature drift:** [UX_SPEC.md](../UX_SPEC.md) and [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) still describe parts of the old navigation and UX. Split their responsibilities into components and page files only after explicit review of existing and newer decisions.
 4. **Historical decisions:** [DECISIONS.md](../DECISIONS.md) is a legacy decision record, not a second source of authority. Meaningful new AI decisions should use categorised GitHub Issues.
