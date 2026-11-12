@@ -1,110 +1,69 @@
-# AGENTS.md
+# AGENTS.md — Vibe Ledger
+
+This is the **entry point**, not an alternative specification. Read the authoritative documents linked below before making changes. Do not independently redefine their rules in this file.
 
 ## Mission
 
-Build the beta described in `/docs`.
+Build the deliberately narrow, local-first Vibe Ledger budgeting app, and use the project to evaluate **autonomous, specification-driven AI development**.
 
-Do not add features because they seem conventional for finance apps. The product is intentionally narrow.
+AI may be used to **build** Vibe Ledger; a generative-AI dependency is not a product requirement.
 
-## Source-of-truth order
+## Required reading and authority
 
-When requirements conflict:
+1. [AI Development Workflow](docs/00-workflow/AI_WORKFLOW.md) — autonomous implementation, decisions, testing, merge and release boundaries.
+2. [Documentation Standards](docs/00-workflow/DOCUMENTATION_STANDARDS.md) — define once/reference everywhere, traceability, backlinks and validation.
+3. [Ownership Map](docs/00-workflow/OWNERSHIP_MAP.md) — where each concept's authoritative definition lives.
+4. Read **task-specific owners** and their dependencies. Core current owners include:
+   - [Money Model](docs/MONEY_MODEL.md) — financial semantics and invariants.
+   - [Product Specification](docs/PRODUCT_SPEC.md) — current scope, pending migration.
+   - [Data Model](docs/DATA_MODEL.md) — logical schema and persistence.
+   - [Monzo Integration](docs/MONZO_INTEGRATION.md) — external integration constraints.
+   - [Roadmap](docs/ROADMAP.md) and [Backlog](docs/BACKLOG.md) — existing sequencing.
 
-1. `docs/MONEY_MODEL.md`
-2. `docs/ACCEPTANCE_SCENARIOS.md`
-3. `docs/PRODUCT_SPEC.md`
-4. `docs/UX_SPEC.md`
-5. `docs/DATA_MODEL.md`
-6. implementation convenience
+**There is no global source-of-truth priority list.** Authority is assigned by the ownership map. If two documents disagree, follow the responsible owner where safe, create a GitHub Issue for the contradiction, and do not guess at risky financial or security behaviour.
 
-Do not change semantic rules merely to simplify UI code.
+Some existing files predate these standards and remain under controlled migration. Their presence is not evidence that their requirements are mutually consistent.
 
-## Mandatory first milestone
+## First implementation milestone
 
-Before live Monzo integration, implement the semantic engine using fixture data and make the acceptance scenarios testable.
+Implement and test the deterministic financial/classification engine using **fixture data before relying on live Monzo integration**. See the [Roadmap](docs/ROADMAP.md), [Money Model](docs/MONEY_MODEL.md) and [Acceptance Scenarios](docs/ACCEPTANCE_SCENARIOS.md).
 
-The application must be able to explain why a raw event produced a given budget effect.
+The application must be able to explain why a raw event produces a given budget effect. Do not revise the money model simply because a UI shortcut or passing test would be convenient.
 
-## Architecture requirements
+## Engineering and UI boundaries
 
-- local-first;
-- deterministic classification;
-- no generative AI dependency;
-- immutable raw-source records;
-- app-owned classifications stored separately;
-- SQLite or equivalent durable local relational storage;
-- classification logic covered by tests;
-- aggregation logic covered by tests;
-- money stored in integer minor units;
-- never use binary floating point for money;
-- percentages may use basis points/decimal arithmetic;
-- preserve source currencies;
-- conversions, if later added, must preserve original amount/currency.
+Read the owning specification for detailed contracts. In particular:
 
-## UI requirements
+- Preserve bank-source records and keep local interpretations separately editable.
+- Store money without binary floating-point arithmetic; preserve original currencies.
+- Keep the domain model independent of Monzo API response shapes.
+- Keep classifications and aggregations deterministic and testable.
+- Build mobile-first, accessible UI; colour alone cannot signal status.
+- Keep aggregate-to-transaction drill-down traceable.
+- Do not silently exclude financial events or invent finance-app features.
+- Avoid an in-app generative-AI feature, investment-return tracking or general accounting product unless the product specification is deliberately revised.
 
-- mobile-first;
-- all aggregates drill to Explorer;
-- red is reserved for target breach;
-- colour is not the sole status signal;
-- extreme runover must remain proportionally tall and performant;
-- no fake AI/narrative copy;
-- no hidden exclusion behaviour.
+This is a **brief orientation**, not a replacement for the [Money Model](docs/MONEY_MODEL.md), [Data Model](docs/DATA_MODEL.md), [Product Specification](docs/PRODUCT_SPEC.md) or [Monzo Integration](docs/MONZO_INTEGRATION.md).
 
-## Monzo requirements
+## Every change
 
-Do not couple domain logic directly to Monzo response shapes.
+1. Identify the feature owner, requirements and relevant consumer documents.
+2. Implement bounded, testable changes; revise specifications only with a justified and traceable decision.
+3. Update affected requirements, tests and documentation.
+4. For Markdown changes, regenerate and verify backlinks:
 
-Use:
+   ~~~bash
+   python3 tools/check_docs.py --write-backlinks
+   python3 tools/check_docs.py
+   ~~~
 
-```text
-Monzo adapter
-    ↓
-raw transaction records
-    ↓
-classification engine
-    ↓
-budget domain model
-    ↓
-UI
-```
+5. Run relevant application tests and the available CI checks. Do not claim unrun checks passed.
+6. Create or update categorised GitHub Issues for meaningful decisions, conflicts and unresolved impacts; routine work stays in commit/PR history.
+7. Merge verified work autonomously only within the safeguards in the [AI Development Workflow](docs/00-workflow/AI_WORKFLOW.md). **A merge is not permission to deploy or handle real funds or credentials.**
 
-The adapter may change without changing money semantics.
+## Known transition
 
-## Implementation ticket order
-
-1. Domain types and money arithmetic.
-2. Local schema/migrations.
-3. Fixture importer.
-4. Classification engine.
-5. Monthly budget engine.
-6. Acceptance scenario tests.
-7. Explorer.
-8. Home.
-9. Heat map + deep links.
-10. Trends.
-11. Rule engine.
-12. Search parser.
-13. Subscription module.
-14. Monzo adapter/auth.
-15. Experimental Money Map.
-
-## Pull request expectations
-
-Every semantic change must:
-- name the money-model rule being changed;
-- update/add acceptance scenarios;
-- include tests;
-- avoid silently changing historical budget meaning.
-
-## Do not implement yet
-
-- AI;
-- funding-source tracing;
-- pot-purpose alignment;
-- investment returns;
-- a general ledger/accounting package;
-- public multi-user infrastructure beyond what Monzo auth requires.
+The old global precedence rules and obsolete page name **Explorer** are being migrated to ownership-based documentation and the **Breakdown** navigation concept. Do not perpetuate the old hierarchy or implement outdated behaviour without checking the relevant owner and current change decisions.
 
 <!-- GENERATED: BACKLINKS START -->
 ## Used by
