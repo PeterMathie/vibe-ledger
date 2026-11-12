@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 
+from backlinks import maintain, START as BACK_START, END as BACK_END
+
 LINK = re.compile(r'!?\[[^\]\n]*\]\((<?[^)\s>]+>?)(?:\s+["\'][^"\']+["\'])?\)')
 HEADING = re.compile(r'^#{1,6}\s+(.+?)(?:\s+#+)?\s*$')
 REQ_ID = re.compile(r'^#{2,6}\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+)\s*(?:[—–:]|$)')
@@ -24,6 +26,7 @@ def active_lines(text):
     """Ignore code fences so examples do not become links or live IDs."""
     in_fence = False
     marker = ''
+    in_generated = False
     for number, line in enumerate(text.splitlines(), 1):
         match = re.match(r'^\s*(`{3,}|~{3,})', line)
         if match:
@@ -34,7 +37,14 @@ def active_lines(text):
                 in_fence = False
             continue
         if not in_fence:
-            yield number, line
+            if line.strip() == BACK_START:
+                in_generated = True
+                continue
+            if line.strip() == BACK_END:
+                in_generated = False
+                continue
+            if not in_generated:
+                yield number, line
 
 
 def slug(text):
@@ -86,7 +96,7 @@ def check_ownership(root, errors):
         errors.append('Ownership map contains no concept entries')
 
 
-def check(root, report_backlinks=False):
+def check(root, report_backlinks=False, write_backlinks=False):
     root = root.resolve()
     errors = []
     check_ownership(root, errors)
@@ -94,9 +104,11 @@ def check(root, report_backlinks=False):
     ids = {}
     backlinks = defaultdict(set)
     anchor_cache = {}
+    documents = {}
     for source in files:
         rel = source.relative_to(root).as_posix()
-        for number, line in active_lines(source.read_text(encoding='utf-8')):
+        documents[source] = source.read_text(encoding='utf-8')
+        for number, line in active_lines(documents[source]):
             found = REQ_ID.match(line) or DOC_ID.match(line)
             if found:
                 value = found.group(1)
@@ -116,8 +128,8 @@ def check(root, report_backlinks=False):
                 if not target.is_relative_to(root) or not target.exists():
                     errors.append(f'{rel}:{number}: broken link {raw}')
                     continue
-                if not target.is_dir():
-                    backlinks[target.relative_to(root).as_posix()].add(rel)
+                if target.is_file() and target.suffix.lower() == '.md' and target != source:
+                    backlinks[target].add(rel)
                 if parsed.fragment and target.is_file() and target.suffix.lower() == '.md':
                     key = target.as_posix()
                     if key not in anchor_cache:
@@ -126,7 +138,11 @@ def check(root, report_backlinks=False):
                         errors.append(f'{rel}:{number}: missing heading #{parsed.fragment} in {target.relative_to(root)}')
     if report_backlinks:
         for target, sources in sorted(backlinks.items()):
-            print(f'{target} <- {", ".join(sorted(sources))}')
+            print(f'{target.relative_to(root).as_posix()} <- {", ".join(sorted(sources))}')
+    backlink_errors, updated = maintain(root, documents, backlinks, write=write_backlinks and not errors)
+    errors.extend(backlink_errors)
+    if write_backlinks and not errors:
+        print(f'Updated backlinks in {updated} Markdown file(s).')
     print(f'Checked {len(files)} Markdown files and {len(ids)} unique IDs.')
     for error in errors:
         print('ERROR:', error)
@@ -139,8 +155,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--report-backlinks', action='store_true', help='Print incoming links without editing files')
+    parser.add_argument('--write-backlinks', action='store_true', help='Insert or refresh generated Used by sections')
     args = parser.parse_args()
-    raise SystemExit(check(args.root, args.report_backlinks))
+    raise SystemExit(check(args.root, args.report_backlinks, args.write_backlinks))
 
 
 if __name__ == '__main__':
