@@ -211,3 +211,11 @@ An AI development task can be marked complete only when:
 - No unsupported claim of release, deployment or real-data integration is made.
 
 **Open follow-ups:** Configure actual GitHub labels and issue templates, strengthen application CI as implementation begins, establish a review-digest cadence, and define any future release policy separately.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [AGENTS.md](<../../AGENTS.md>)
+- [README.md](<../../README.md>)
+- [docs/00-workflow/OWNERSHIP_MAP.md](<OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->

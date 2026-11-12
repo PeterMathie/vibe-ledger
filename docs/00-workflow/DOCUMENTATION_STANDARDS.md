@@ -393,5 +393,8 @@ Use the existing checker for the rules it currently supports. Agents must still 
 <!-- GENERATED: BACKLINKS START -->
 ## Used by
 
+- [AGENTS.md](<../../AGENTS.md>)
+- [README.md](<../../README.md>)
+- [docs/00-workflow/AI_WORKFLOW.md](<AI_WORKFLOW.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<OWNERSHIP_MAP.md>)
 <!-- GENERATED: BACKLINKS END -->

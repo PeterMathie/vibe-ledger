@@ -158,5 +158,6 @@ Therefore:
 <!-- GENERATED: BACKLINKS START -->
 ## Used by
 
+- [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 <!-- GENERATED: BACKLINKS END -->

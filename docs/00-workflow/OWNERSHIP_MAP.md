@@ -71,5 +71,8 @@ This document is **draft** until existing specifications have been reconciled; m
 <!-- GENERATED: BACKLINKS START -->
 ## Used by
 
+- [AGENTS.md](<../../AGENTS.md>)
+- [README.md](<../../README.md>)
+- [docs/00-workflow/AI_WORKFLOW.md](<AI_WORKFLOW.md>)
 - [docs/00-workflow/DOCUMENTATION_STANDARDS.md](<DOCUMENTATION_STANDARDS.md>)
 <!-- GENERATED: BACKLINKS END -->
