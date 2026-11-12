@@ -263,4 +263,5 @@ Never collapse these into one ambiguous figure.
 - [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 - [docs/00-workflow/AI_WORKFLOW.md](<00-workflow/AI_WORKFLOW.md>)
+- [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->

@@ -78,4 +78,5 @@ This document is **draft** until existing specifications have been reconciled; m
 - [docs/00-workflow/AI_WORKFLOW.md](<AI_WORKFLOW.md>)
 - [docs/00-workflow/DOCUMENTATION_STANDARDS.md](<DOCUMENTATION_STANDARDS.md>)
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<../01-philosophy/DESIGN_PHILOSOPHY.md>)
+- [docs/05-pages/home/FUNCTIONAL.md](<../05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->

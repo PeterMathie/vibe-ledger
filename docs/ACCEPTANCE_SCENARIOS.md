@@ -385,4 +385,5 @@ Expected:
 - [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+- [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->

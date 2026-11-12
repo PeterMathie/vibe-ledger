@@ -276,3 +276,12 @@ These should be logged as a coherent retrospective design/technical review item;
 ## Definition of ready for implementation
 
 Home implementation is ready when the financial period contract, allocation editing policy and Breakdown filter handoff are precise enough to test, and the Figma/component contracts specify the necessary presentation. This document is adequate as a **functional input to Figma**, not proof that those dependencies are already implemented.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/ACCEPTANCE_SCENARIOS.md](<../../ACCEPTANCE_SCENARIOS.md>)
+- [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
+- [docs/UX_SPEC.md](<../../UX_SPEC.md>)
+<!-- GENERATED: BACKLINKS END -->

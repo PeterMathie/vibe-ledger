@@ -434,4 +434,6 @@ The implementation must enforce:
 - [docs/00-workflow/AI_WORKFLOW.md](<00-workflow/AI_WORKFLOW.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
+- [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/ACCEPTANCE_SCENARIOS.md](<ACCEPTANCE_SCENARIOS.md>)
 <!-- GENERATED: BACKLINKS END -->
