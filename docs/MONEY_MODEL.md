@@ -425,3 +425,10 @@ The implementation must enforce:
 - internal transfers affect neither spending nor income;
 - monthly allocation percentages total exactly 100%;
 - historical month targets remain stable unless the user explicitly edits that historical month.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+- [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->

@@ -272,3 +272,10 @@ Minimal.
 - runover can add rows without celebratory/confetti animation;
 - no pulsing red alarms;
 - respect reduced-motion preference.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+- [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->

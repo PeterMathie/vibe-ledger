@@ -470,3 +470,10 @@ The beta succeeds if the user can:
 - distinguish a savings contribution from actual spending;
 - distinguish a savings withdrawal from actual income;
 - see subscription commitments without maintaining a separate spreadsheet.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<../README.md>)
+- [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->

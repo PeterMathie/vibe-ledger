@@ -105,3 +105,10 @@ Every semantic change must:
 - investment returns;
 - a general ledger/accounting package;
 - public multi-user infrastructure beyond what Monzo auth requires.
+
+<!-- GENERATED: BACKLINKS START -->
+## Used by
+
+- [README.md](<README.md>)
+- [docs/00-workflow/OWNERSHIP_MAP.md](<docs/00-workflow/OWNERSHIP_MAP.md>)
+<!-- GENERATED: BACKLINKS END -->
