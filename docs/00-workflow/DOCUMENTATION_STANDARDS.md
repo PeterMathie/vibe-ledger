@@ -6,7 +6,7 @@
 
 > **Core principle: Define once, reference everywhere.** Documentation is an information web, not a collection of independent Markdown files.
 
-This document describes the **intended standard**. The ownership map, backlink generator, validation scripts, GitHub labels and CI checks described below are proposals until separately implemented. Committing this standard does not imply those tools already exist.
+This document describes the **intended standard**. A transitional [ownership map](OWNERSHIP_MAP.md), initial [structural checker](../../tools/check_docs.py), its tests and [GitHub Actions workflow](../../.github/workflows/docs-validation.yml) are implemented on the documentation branch. Automated backlink insertion, the full planned validation coverage, issue automation and migration of legacy specifications remain future work.
 
 ## 1. Purpose and scope
 
@@ -318,7 +318,7 @@ AI-assisted semantic analysis MAY flag possible contradictions, ambiguous criter
 
 Checks should explain how to fix failures. Agents MUST NOT disable or weaken required checks merely to merge.
 
-**Implementation note:** This section describes required future checks; no such checker is created by this commit.
+**Implementation status:** The initial [checker](../../tools/check_docs.py) currently verifies Markdown links and anchors, selected stable IDs, and ownership-map entries. CI runs the checker and its regression tests. `python3 tools/check_docs.py --report-backlinks` prints detected incoming links but does **not yet write generated backlink sections**. Semantic contradiction detection, full requirement traceability and automatic backlink maintenance remain to be implemented.
 
 ## 14. Controlled deprecation and migration
 
@@ -386,6 +386,6 @@ Implementation can proceed incrementally:
 5. Add CI enforcement and review-ticket automation.
 6. Evolve towards automatically assembled agent context.
 
-Until a check exists, agents must use best-effort manual verification and must not claim automatic enforcement.
+Use the existing checker for the rules it currently supports. Agents must still manually assess semantic consistency, uncovered dependencies, and any rules not yet automated; they must not claim full enforcement.
 
 **Status:** This remains a draft until reviewed and promoted to Active. The `main` branch is not changed by committing it on `docs/ai-workflow-rebuild`.
