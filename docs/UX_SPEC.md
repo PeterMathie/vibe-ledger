@@ -16,6 +16,8 @@
 
 ## 2. Home
 
+**Migration notice:** Page behaviour and acceptance criteria are now owned by the [Home Functional Specification](05-pages/home/FUNCTIONAL.md). This section is a legacy UX reference for Figma exploration; it must not independently override the current two-position Home interaction contract or prescribe final design tokens.
+
 ### 2.1 Header
 
 Show:

@@ -143,7 +143,9 @@ This distinction preserves two useful facts:
 
 ### 5.1 Home
 
-Purpose: **How am I doing this month?**
+**Migration notice:** Home-specific page behaviour is now defined by the [Home Functional Specification](05-pages/home/FUNCTIONAL.md). The following list records the original beta scope and is not a second authoritative interaction contract. Its calendar-month assumptions must be reconciled with the period model before implementation.
+
+Purpose (legacy): **How am I doing this month?**
 
 Contains:
 

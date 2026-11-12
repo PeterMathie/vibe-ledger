@@ -194,6 +194,8 @@ This explicitly avoids trying to infer "funding provenance."
 
 ## G. Runover visual
 
+These historical examples coordinate tests; the current Home page behaviour and acceptance criteria are owned by the [Home Functional Specification](05-pages/home/FUNCTIONAL.md), and monetary calculations by the [Money Model](MONEY_MODEL.md).
+
 ### G1. Under target
 
 Fun target £600, actual £300.
@@ -233,6 +235,8 @@ Expected:
 ---
 
 ## H. Heat map
+
+These historical examples coordinate tests; the [Home Functional Specification](05-pages/home/FUNCTIONAL.md) owns Home's calendar interaction, and the [Money Model](MONEY_MODEL.md) owns the underlying spending semantics.
 
 ### H1. No spending
 
