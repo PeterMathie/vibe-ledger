@@ -1,0 +1,69 @@
+# Vibe Ledger — Ownership Map
+
+**Status:** Draft — transitional ownership during documentation rebuild  
+**Document ID:** DOC-OWNERSHIP  
+**Companion standard:** [Documentation Standards](DOCUMENTATION_STANDARDS.md)
+
+## Purpose
+
+This is the central index of **where authoritative definitions live**, not a replacement for those definitions. Consult the owning document for the actual rule. The entries below map responsibilities to **existing files on this branch**; they do **not** assert that legacy content has already been reconciled with the new documentation standards.
+
+**Define once, reference everywhere.** Peer documents may refer to a concept but must not independently define the same normative rule.
+
+## Current ownership entries
+
+The machine-checkable section below is deliberately simple. The documentation checker treats the first column as a unique concept key and the second as an existing repository-relative Markdown file. It does not infer semantic correctness from a valid path.
+
+<!-- OWNERSHIP:START -->
+| Concept | Owner | Scope |
+| --- | --- | --- |
+| `docs.standards` | `docs/00-workflow/DOCUMENTATION_STANDARDS.md` | Documentation conventions, validation and information-web rules |
+| `docs.ownership` | `docs/00-workflow/OWNERSHIP_MAP.md` | Mapping concepts to their authoritative documents |
+| `product.definition` | `docs/PRODUCT_SPEC.md` | Product aims, scope and primary capabilities |
+| `product.navigation-legacy` | `docs/PRODUCT_SPEC.md` | Existing navigation specification; pending page-level migration |
+| `finance.semantics` | `docs/MONEY_MODEL.md` | Money concepts, calculations and financial invariants |
+| `quality.financial-scenarios-legacy` | `docs/ACCEPTANCE_SCENARIOS.md` | Legacy cross-feature scenario examples; must not override the money model |
+| `data.logical-model` | `docs/DATA_MODEL.md` | Logical schema and persistence entities |
+| `integration.monzo` | `docs/MONZO_INTEGRATION.md` | Monzo import, sync and integration boundaries |
+| `ux.design-legacy` | `docs/UX_SPEC.md` | Existing UX and visual composition; pending design-system/page migration |
+| `delivery.roadmap` | `docs/ROADMAP.md` | Planned phases and sequencing |
+| `delivery.backlog` | `docs/BACKLOG.md` | Legacy implementation task breakdown |
+| `agents.guidance-legacy` | `AGENTS.md` | Existing agent instructions; pending reconciliation with AI workflow |
+<!-- OWNERSHIP:END -->
+
+## Planned ownership transfers
+
+These are **future destinations, not active owners**. The files may not exist yet and therefore do not appear in the validated table.
+
+| Responsibility | Planned destination |
+| --- | --- |
+| Product/design philosophy | `docs/01-philosophy/DESIGN_PHILOSOPHY.md` |
+| Design tokens and visual rules | `design-tokens/tokens.json`, `docs/03-design-system/` |
+| Reusable component contracts | `docs/04-components/` (extensible; not an exhaustive inventory) |
+| Home page behaviour | `docs/05-pages/home/FUNCTIONAL.md` |
+| Other page-specific behaviour | `docs/05-pages/<page>/FUNCTIONAL.md` |
+| Page composition | `docs/05-pages/<page>/DESIGN.md` |
+| Flutter technical contracts | `docs/06-engineering/` |
+| Autonomous implementation and merging | `docs/00-workflow/AI_WORKFLOW.md` |
+| Cross-feature testing strategy | `docs/07-quality/` |
+
+A transfer is complete only after the new owner exists, requirements and acceptance criteria are migrated, the active entry is updated and dependent references are repaired.
+
+## Known migration concerns
+
+1. **Conflicting authority rules:** [AGENTS.md](../../AGENTS.md) currently specifies a global source-of-truth order. The new standard adopts ownership-based authority. Reconcile these rules when writing `AI_WORKFLOW.md`; do not assume both can remain normative.
+2. **Financial examples:** [ACCEPTANCE_SCENARIOS.md](../ACCEPTANCE_SCENARIOS.md) calls itself executable product truth. Under the new structure, financial definitions belong in the [Money Model](../MONEY_MODEL.md), with requirement-level acceptance criteria next to requirements. Migrate and cross-link examples without changing financial semantics silently.
+3. **UX and feature drift:** [UX_SPEC.md](../UX_SPEC.md) and [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) still describe parts of the old navigation and UX. Split their responsibilities into components and page files only after explicit review of existing and newer decisions.
+4. **Historical decisions:** [DECISIONS.md](../DECISIONS.md) is a legacy decision record, not a second source of authority. Meaningful new AI decisions should use categorised GitHub Issues.
+
+## Rules for editing this map
+
+- Each concept key appears exactly once.
+- Each active owner is an existing repository-relative file.
+- The map identifies the owner but does not duplicate its contract.
+- Add new concepts when genuinely needed; do not aim for an exhaustive inventory of every sentence or widget.
+- Reclassifications must update relevant dependent specifications and links.
+- Raise a GitHub Issue for ambiguous ownership or unresolved semantic contradictions.
+- Run `python3 tools/check_docs.py` after any change to documentation structure or ownership.
+
+This document is **draft** until existing specifications have been reconciled; mechanical validation can start before all migrations are complete.
