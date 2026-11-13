@@ -85,7 +85,9 @@ Tap:
 
 ---
 
-## 3. Explorer
+## 3. Explorer (legacy; now **Breakdown**)
+
+**Migration notice:** The [Breakdown Functional Specification](05-pages/breakdown/FUNCTIONAL.md) owns active Breakdown page behaviour; [pre-Figma design intent](05-pages/breakdown/DESIGN_INTENT.md) captures the approved bar/list direction. The following Explorer layout is superseded where it differs.
 
 Explorer is the central detail screen.
 
@@ -224,7 +226,9 @@ No forced sinking fund.
 
 ---
 
-## 6. Search
+## 6. Search (legacy)
+
+**Migration notice:** The [Transaction Search Contract](04-components/features/TRANSACTION_SEARCH.md) owns the four permanent, initially empty filter groups and deterministic search logic. The token-parser examples below are superseded, not V1 requirements.
 
 Single field on Explorer.
 
@@ -281,5 +285,6 @@ Minimal.
 - [README.md](<../README.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
+- [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->

@@ -202,7 +202,7 @@ Home's progress summaries and calendar dates provide direct access to **Breakdow
 - Returning to Home retains the useful exploration state when feasible.
 - The destination is labelled **Breakdown** in the new navigation model; references to **Explorer** in legacy documents refer to its earlier working name.
 
-**Boundary:** Breakdown owns its own results, editing, category lists and search implementation. This document only owns Home's outgoing navigation intent and filter handoff.
+**Boundary:** [Breakdown](../breakdown/FUNCTIONAL.md) owns its own results, editing, category lists and search-result integration. The [Transaction Search Contract](../../04-components/features/TRANSACTION_SEARCH.md) owns the search builder. This document only owns Home's outgoing navigation intent and filter handoff.
 
 ### HOME-012 — Navigation and state continuity
 
@@ -281,6 +281,7 @@ Home implementation is ready when the financial period contract, allocation edit
 ## Used by
 
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/05-pages/breakdown/FUNCTIONAL.md](<../breakdown/FUNCTIONAL.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<../../ACCEPTANCE_SCENARIOS.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 - [docs/UX_SPEC.md](<../../UX_SPEC.md>)

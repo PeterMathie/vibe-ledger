@@ -333,5 +333,7 @@ When existing design specifications contradict this philosophy, the relevant con
 
 - [AGENTS.md](<../../AGENTS.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/05-pages/breakdown/DESIGN_INTENT.md](<../05-pages/breakdown/DESIGN_INTENT.md>)
+- [docs/05-pages/breakdown/FUNCTIONAL.md](<../05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<../05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->

@@ -161,7 +161,9 @@ Contains:
 - secondary net-savings movement indicator;
 - drill-down links into Explorer.
 
-### 5.2 Explorer
+### 5.2 Explorer (legacy name; now **Breakdown**)
+
+**Migration notice:** The [Breakdown Functional Specification](05-pages/breakdown/FUNCTIONAL.md) owns the active four-scope, two-view page behaviour. The [Transaction Search Contract](04-components/features/TRANSACTION_SEARCH.md) replaces the legacy search suggestions. The following list is historic scope/context only, not a competing interaction contract.
 
 Purpose: **Where did the money go?**
 

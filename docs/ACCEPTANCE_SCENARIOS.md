@@ -1,5 +1,7 @@
 # Acceptance Scenarios
 
+**Migration note:** [Breakdown](05-pages/breakdown/FUNCTIONAL.md) owns page-level interactions and [Transaction Search](04-components/features/TRANSACTION_SEARCH.md) owns the local search builder. This document retains financial example scenarios and does not override the [Money Model](MONEY_MODEL.md).
+
 These scenarios are executable product truth. They should become automated tests wherever possible.
 
 Assume unless stated otherwise:
@@ -385,5 +387,6 @@ Expected:
 - [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
+- [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->
