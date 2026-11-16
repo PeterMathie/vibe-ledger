@@ -194,6 +194,8 @@ Examples:
 
 ### 5.3 Trends
 
+**Migration notice:** The V1 chart, scope drill-down, selected-day inspection and date-range controls are owned by the [Trends Functional Specification](05-pages/trends/FUNCTIONAL.md). The older monthly/grouped-bar and direct-Explorer-navigation ideas below are historical, **not V1 implementation requirements**.
+
 Purpose: **How has this changed over time?**
 
 Primary visual:
@@ -484,4 +486,5 @@ The beta succeeds if the user can:
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<05-pages/trends/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->
