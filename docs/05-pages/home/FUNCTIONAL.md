@@ -282,6 +282,7 @@ Home implementation is ready when the financial period contract, allocation edit
 
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<../breakdown/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<../trends/FUNCTIONAL.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<../../ACCEPTANCE_SCENARIOS.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 - [docs/UX_SPEC.md](<../../UX_SPEC.md>)
