@@ -156,6 +156,8 @@ Ignore / neutral
 
 ## 4. Trends
 
+**Migration notice:** The [Trends Functional Specification](05-pages/trends/FUNCTIONAL.md) now owns V1 trends behaviour. The monthly/grouped chart, period presets, excluded toggle and direct-Explorer navigation described below are **legacy notes**, not competing V1 requirements.
+
 ### 4.1 Filter bar
 
 Controls:
@@ -287,4 +289,5 @@ Minimal.
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<05-pages/trends/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->
