@@ -247,6 +247,8 @@ Optional saving/provision calculations can tell the user how much to set aside, 
 
 ### 5.5 Settings / Classification
 
+**Migration notice:** [Settings Functional Specification](05-pages/settings/FUNCTIONAL.md) now owns the V1 four-modal menu: Account Syncing, Colour Scheme, Categories and Budget Periods. [Startup Functional Specification](05-pages/startup/FUNCTIONAL.md) owns local biometric unlock / OAuth / initial and on-launch sync. [Local Data Architecture](06-engineering/LOCAL_DATA_ARCHITECTURE.md) owns the no-hosted-backend ingest → encrypted SQLite → queries pipeline. The following list is a **legacy inventory**, not permission to add default-allocation controls, classification-rule editors or a fifth Settings section.
+
 Contains:
 
 - Monzo connection state;
