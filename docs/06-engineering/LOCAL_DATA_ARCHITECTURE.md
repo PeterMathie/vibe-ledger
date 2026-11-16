@@ -263,6 +263,7 @@ Required test fixtures / acceptance checks:
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../00-workflow/OWNERSHIP_MAP.md>)
 - [docs/05-pages/settings/FUNCTIONAL.md](<../05-pages/settings/FUNCTIONAL.md>)
 - [docs/05-pages/startup/FUNCTIONAL.md](<../05-pages/startup/FUNCTIONAL.md>)
+- [docs/DATA_MODEL.md](<../DATA_MODEL.md>)
 - [docs/MONZO_INTEGRATION.md](<../MONZO_INTEGRATION.md>)
 - [docs/PRODUCT_SPEC.md](<../PRODUCT_SPEC.md>)
 <!-- GENERATED: BACKLINKS END -->
