@@ -23,22 +23,26 @@ The machine-checkable section below is deliberately simple. The documentation ch
 | `page.home.functional` | `docs/05-pages/home/FUNCTIONAL.md` | Home page states, navigation, calendar and allocation interaction orchestration |
 | `page.breakdown.functional` | `docs/05-pages/breakdown/FUNCTIONAL.md` | Breakdown scopes, views, navigation, and financial summary presentation |
 | `page.trends.functional` | `docs/05-pages/trends/FUNCTIONAL.md` | Trends scopes, day inspection, chart navigation, supporting panel and landscape mode |
+| `page.settings.functional` | `docs/05-pages/settings/FUNCTIONAL.md` | Four Settings modals, category sorting game, palette selection, sync controls, period preview |
+| `page.startup.functional` | `docs/05-pages/startup/FUNCTIONAL.md` | First connection, biometric unlock, on-launch sync, offline access and local session expiry |
 | `component.transaction-search` | `docs/04-components/features/TRANSACTION_SEARCH.md` | Local four-group search query builder and predicate semantics |
 | `page.breakdown.design-intent` | `docs/05-pages/breakdown/DESIGN_INTENT.md` | Transitional pre-Figma layout and visual intent, not exact design tokens |
 | `agents.workflow` | `docs/00-workflow/AI_WORKFLOW.md` | Autonomous agent lifecycle, permissions, verification, merging and release boundaries |
 | `product.definition` | `docs/PRODUCT_SPEC.md` | Product aims, scope and primary capabilities |
 | `product.navigation-legacy` | `docs/PRODUCT_SPEC.md` | Existing navigation specification; pending page-level migration |
 | `finance.semantics` | `docs/MONEY_MODEL.md` | Money concepts, calculations and financial invariants |
+| `finance.budget-periods` | `docs/02-product/BUDGET_PERIODS.md` | Budget period boundaries, 1–31 date fallback, historical preservation and rule changes |
 | `quality.financial-scenarios-legacy` | `docs/ACCEPTANCE_SCENARIOS.md` | Legacy cross-feature scenario examples; must not override the money model |
 | `data.logical-model` | `docs/DATA_MODEL.md` | Logical schema and persistence entities |
 | `integration.monzo` | `docs/MONZO_INTEGRATION.md` | Monzo import, sync and integration boundaries |
+| `engineering.local-data` | `docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md` | On-device Monzo adapter, import/reconciliation, encrypted persistence and financial query pipeline |
 | `ux.design-legacy` | `docs/UX_SPEC.md` | Existing UX and visual composition; pending design-system/page migration |
 | `delivery.roadmap` | `docs/ROADMAP.md` | Planned phases and sequencing |
 | `delivery.backlog` | `docs/BACKLOG.md` | Legacy implementation task breakdown |
 | `agents.entrypoint` | `AGENTS.md` | Agent navigation entry point; links to the owning operational and product specifications |
 <!-- OWNERSHIP:END -->
 
-The cross-cutting principles are now defined in [Design Philosophy](../01-philosophy/DESIGN_PHILOSOPHY.md). Specific visual values and component behaviours retain separate owners. Home page behaviour is now owned by the [Home Functional Specification](../05-pages/home/FUNCTIONAL.md). [Breakdown](../05-pages/breakdown/FUNCTIONAL.md) and its [Transaction Search Contract](../04-components/features/TRANSACTION_SEARCH.md) now own the V1 exploration and local search behaviour; the [pre-Figma design intent](../05-pages/breakdown/DESIGN_INTENT.md) records agreed direction. [Trends](../05-pages/trends/FUNCTIONAL.md) now owns the V1 historical financial-activity chart, category navigation, selected-day breakdowns, supporting panel and landscape experience. Exact visual design remains a Figma/handoff task.
+The cross-cutting principles are now defined in [Design Philosophy](../01-philosophy/DESIGN_PHILOSOPHY.md). Specific visual values and component behaviours retain separate owners. Home page behaviour is now owned by the [Home Functional Specification](../05-pages/home/FUNCTIONAL.md). [Breakdown](../05-pages/breakdown/FUNCTIONAL.md) and its [Transaction Search Contract](../04-components/features/TRANSACTION_SEARCH.md) now own the V1 exploration and local search behaviour; the [pre-Figma design intent](../05-pages/breakdown/DESIGN_INTENT.md) records agreed direction. [Trends](../05-pages/trends/FUNCTIONAL.md) now owns the V1 historical financial-activity chart, category navigation, selected-day breakdowns, supporting panel and landscape experience. [Settings](../05-pages/settings/FUNCTIONAL.md) and [Startup](../05-pages/startup/FUNCTIONAL.md) now own the agreed modal/configuration and first-unlock flows; [Budget Periods](../02-product/BUDGET_PERIODS.md) owns the 1–31 start-day calendar rule; [Local Data Architecture](../06-engineering/LOCAL_DATA_ARCHITECTURE.md) owns the no-hosted-backend on-device sync/storage/query handoff. Exact visual design remains a Figma/handoff task.
 
 ## Planned ownership transfers
 
@@ -59,7 +63,7 @@ A transfer is complete only after the new owner exists, requirements and accepta
 
 1. **Agent authority rule reconciled:** [AGENTS.md](../../AGENTS.md) now delegates workflow authority to [AI_WORKFLOW.md](AI_WORKFLOW.md) and uses ownership-based document authority. Existing product and UX specifications still need content-by-content migration.
 2. **Financial examples:** [ACCEPTANCE_SCENARIOS.md](../ACCEPTANCE_SCENARIOS.md) calls itself executable product truth. Under the new structure, financial definitions belong in the [Money Model](../MONEY_MODEL.md), with requirement-level acceptance criteria next to requirements. Migrate and cross-link examples without changing financial semantics silently.
-3. **UX and feature drift:** [UX_SPEC.md](../UX_SPEC.md) and [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) still contain older navigation, Home and Explorer summaries. [Home Functional Specification](../05-pages/home/FUNCTIONAL.md) and [Breakdown Functional Specification](../05-pages/breakdown/FUNCTIONAL.md) now own those respective pages; the latter replaces Explorer and its old search grammar. Trends has now migrated to the [Trends Functional Specification](../05-pages/trends/FUNCTIONAL.md); migrate Subscriptions and other page behaviour separately. The payday-period domain model remains an outstanding dependency.
+3. **UX and feature drift:** [UX_SPEC.md](../UX_SPEC.md) and [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) still contain older navigation, Home and Explorer summaries. [Home Functional Specification](../05-pages/home/FUNCTIONAL.md) and [Breakdown Functional Specification](../05-pages/breakdown/FUNCTIONAL.md) now own those respective pages; the latter replaces Explorer and its old search grammar. Trends has now migrated to the [Trends Functional Specification](../05-pages/trends/FUNCTIONAL.md); migrate Subscriptions and other page behaviour separately. The budget-period domain rule has been drafted in [Budget Periods](../02-product/BUDGET_PERIODS.md), while mid-period rule changes and physical schema migration remain outstanding dependencies.
 4. **Historical decisions:** [DECISIONS.md](../DECISIONS.md) is a legacy decision record, not a second source of authority. Meaningful new AI decisions should use categorised GitHub Issues.
 
 ## Rules for editing this map
