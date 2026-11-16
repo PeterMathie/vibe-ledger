@@ -105,7 +105,7 @@ flowchart TD
     G --> H{Unlocked?}
     H -- No --> I[Remain locked]
     H -- Yes --> J[Sync on launch]
-    F --> J
+    F --> L[Home with refreshed local data]
     J --> K{Fresh sync succeeds?}
     K -- Yes --> L[Home with refreshed local data]
     K -- No / slow --> M[Continue offline from encrypted local data]
