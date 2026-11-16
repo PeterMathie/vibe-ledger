@@ -437,5 +437,6 @@ The implementation must enforce:
 - [docs/04-components/features/TRANSACTION_SEARCH.md](<04-components/features/TRANSACTION_SEARCH.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<05-pages/trends/FUNCTIONAL.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<ACCEPTANCE_SCENARIOS.md>)
 <!-- GENERATED: BACKLINKS END -->
