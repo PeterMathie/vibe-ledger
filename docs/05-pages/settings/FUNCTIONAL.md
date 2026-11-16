@@ -174,6 +174,7 @@ A vertically scrollable **preview contained within the Budget Periods modal** sh
 ## Used by
 
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/02-product/BUDGET_PERIODS.md](<../../02-product/BUDGET_PERIODS.md>)
 - [docs/05-pages/startup/FUNCTIONAL.md](<../startup/FUNCTIONAL.md>)
 - [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<../../06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
