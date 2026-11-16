@@ -1,6 +1,8 @@
 # Data Model
 
-Technology-neutral logical schema. SQLite is the expected local persistence layer for a mobile beta.
+Technology-neutral logical schema. An encrypted SQLite implementation is planned for the local-first mobile V1; see [Local Data Architecture](06-engineering/LOCAL_DATA_ARCHITECTURE.md).
+
+**V1 migration notice:** The older sections below record the current calendar-month and unrestricted-category schema. They must be migrated to the period-keyed and source-mapped entities specified in **Section 14** before the Settings and custom-period functionality is implemented. The [Budget Periods Domain Contract](02-product/BUDGET_PERIODS.md) owns date arithmetic and history preservation. This file remains the owner of logical persistence structure; legacy `monthly_budgets` and `month_key` are not future implementation requirements.
 
 ## 1. `raw_transactions`
 
@@ -256,6 +258,100 @@ saving_target_progress
 ```
 
 Never collapse these into one ambiguous figure.
+
+## 14. Required V1 schema evolution
+
+The tables above are a starting schema, **not a second calendar-month authority**. Implement the following migration together with the [local ingestion pipeline](06-engineering/LOCAL_DATA_ARCHITECTURE.md) and the [budget-period semantics](02-product/BUDGET_PERIODS.md):
+
+### 14.1 Source accounts, pots and sync coverage
+
+```text
+source_accounts:
+  (source, source_account_id) unique
+  description, account_type nullable, first_seen_at, last_seen_at
+
+source_pots:
+  (source, source_account_id, source_pot_id) unique
+  name, style nullable, latest_balance_minor nullable, currency,
+  latest_balance_observed_at nullable, deleted_flag nullable
+
+sync_state per source/account:
+  initial_history_complete, oldest_covered_at nullable,
+  latest_seen_transaction_time nullable, last_successful_sync_at nullable,
+  last_attempt_at nullable, last_error_code nullable,
+  incremental_cursor nullable, coverage_status
+```
+
+Importing every permitted Monzo account **does not** mean each pot has a separate fully accessible transaction history.
+
+### 14.2 Source category identity and user mapping
+
+Retain the source category key independent of display names and visual identity. Extend `categories` with:
+
+```text
+source             nullable (e.g. "monzo" for directly imported keys)
+source_key         nullable (e.g. "eating_out")
+display_name       read-only for source-derived category, app-owned otherwise
+icon               nullable app-owned value
+gradient_start     nullable validated colour
+gradient_end       nullable validated colour
+super_category_id  nullable (null = Unassigned)
+```
+
+Add a unique identity constraint for `(source, source_key)` when source-driven, and a separate stable ID for app-defined categories used by explicitly classified Saving/pot transfers. The UI game should expose assignable identities, **not assert that Monzo supplies user-defined Saving categories**.
+
+Reclassification/assignment operations should be reversible within the Settings editing session without rewriting imported source category keys.
+
+### 14.3 Period-keyed budget storage
+
+Replace the calendar-month-only key with:
+
+```text
+budget_period_rules:
+  id, start_day (integer 1..31), effective_from, created_at
+
+budget_periods:
+  id, rule_id, start_date, end_exclusive_date,
+  budget_base_minor, budget_base_mode,
+  living_ratio_bp, saving_ratio_bp, fun_ratio_bp,
+  living_target_minor, saving_target_minor, fun_target_minor,
+  created_at, updated_at, closed_at nullable
+
+income_adjustments:
+  id, budget_period_id, amount_minor_signed, reason, created_at
+```
+
+Period start/end use **date-only** values in the user's chosen financial time zone. No two authoritative active periods overlap. Historical periods retain their allocations; the explicit transition policy when changing start day mid-period must be resolved before shipping.
+
+### 14.4 Theme preference
+
+```text
+app_preferences:
+  theme_preset_id
+  financial_timezone
+  configured_at / updated_at
+```
+
+V1 stores a selected predefined theme identifier, not a collection of arbitrary app-wide RGB sliders. Category gradient endpoints remain separately app-owned.
+
+### 14.5 Source records, indexes, retention
+
+- Preserve the original immutable-ish `raw_transactions` table and separately owned classification/split tables.
+- Store account-scoped transaction keys with unique `(source, source_transaction_id)` and indexing by source account and created timestamp; retain source amounts in integer minor units and UTC timestamps.
+- Keep only the source payload needed for safe reclassification/debugging, encrypted at rest; do not retain unneeded PII or secrets in a raw JSON dump by default.
+- Index `(source, source_account_id, created_at)`, effective category/type/scope, period start/end and search fields.
+- Model sync coverage and local deletes separately from user transaction exclusions; a failed fetch is **not** a source deletion.
+
+### 14.6 Reactive read models
+
+Future logical queries replace `v_monthly_*` names with period-aware equivalents. Centralise effective-event classification and use shared daily aggregates for Trends, Home and Breakdown; **do not let each page interpret debit/credit signs itself**.
+
+**Migration acceptance criteria**
+1. Existing monthly sample data is migrated or clearly invalidated in a reversible local migration; raw IDs/user overrides survive.
+2. Period boundaries and category gradients survive app restart/resync.
+3. Source category reassignment updates affected historical views without changing raw source records.
+4. All signed monetary values remain exact integer minor units; unsupported currency mixing is rejected or reported.
+5. Database migrations and downgrade/recovery are tested using encrypted fixtures.
 
 <!-- GENERATED: BACKLINKS START -->
 ## Used by
