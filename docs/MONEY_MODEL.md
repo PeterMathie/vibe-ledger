@@ -2,6 +2,8 @@
 
 This document is normative. If UI copy, imported bank fields or implementation shortcuts conflict with this model, this model wins.
 
+**Budget-period migration notice:** The formulae below currently use the legacy symbol `m` for a calendar month. V1 custom budget periods replace that indexing with the **selected budget period** defined by [Budget Periods](02-product/BUDGET_PERIODS.md); the financial meaning of income, spending, Saving contributions and withdrawals does **not** change. Do not hard-code a calendar month as the interval in Home, Breakdown or Trends.
+
 ## 1. Four independent concepts
 
 Every imported bank event has four separate concepts.
