@@ -249,6 +249,7 @@ The approved mockup establishes the intended **structure**, not permission to ch
 - [docs/04-components/features/TRANSACTION_SEARCH.md](<../../04-components/features/TRANSACTION_SEARCH.md>)
 - [docs/05-pages/breakdown/DESIGN_INTENT.md](<DESIGN_INTENT.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<../home/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<../trends/FUNCTIONAL.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<../../ACCEPTANCE_SCENARIOS.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 - [docs/UX_SPEC.md](<../../UX_SPEC.md>)
