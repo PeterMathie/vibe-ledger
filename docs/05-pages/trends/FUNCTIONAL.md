@@ -237,6 +237,7 @@ These are tracked design/technical dependencies, **not permission to reinterpret
 ## Used by
 
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<../../06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 - [docs/UX_SPEC.md](<../../UX_SPEC.md>)
 <!-- GENERATED: BACKLINKS END -->
