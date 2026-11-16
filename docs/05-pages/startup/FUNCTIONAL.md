@@ -120,5 +120,6 @@ flowchart TD
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
 - [docs/05-pages/settings/FUNCTIONAL.md](<../settings/FUNCTIONAL.md>)
 - [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<../../06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
+- [docs/MONZO_INTEGRATION.md](<../../MONZO_INTEGRATION.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 <!-- GENERATED: BACKLINKS END -->
