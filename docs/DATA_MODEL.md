@@ -359,6 +359,9 @@ Future logical queries replace `v_monthly_*` names with period-aware equivalents
 - [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 - [docs/00-workflow/AI_WORKFLOW.md](<00-workflow/AI_WORKFLOW.md>)
+- [docs/02-product/BUDGET_PERIODS.md](<02-product/BUDGET_PERIODS.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/settings/FUNCTIONAL.md](<05-pages/settings/FUNCTIONAL.md>)
+- [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 <!-- GENERATED: BACKLINKS END -->
