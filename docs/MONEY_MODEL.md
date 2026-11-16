@@ -436,9 +436,12 @@ The implementation must enforce:
 - [docs/00-workflow/AI_WORKFLOW.md](<00-workflow/AI_WORKFLOW.md>)
 - [docs/00-workflow/OWNERSHIP_MAP.md](<00-workflow/OWNERSHIP_MAP.md>)
 - [docs/01-philosophy/DESIGN_PHILOSOPHY.md](<01-philosophy/DESIGN_PHILOSOPHY.md>)
+- [docs/02-product/BUDGET_PERIODS.md](<02-product/BUDGET_PERIODS.md>)
 - [docs/04-components/features/TRANSACTION_SEARCH.md](<04-components/features/TRANSACTION_SEARCH.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/settings/FUNCTIONAL.md](<05-pages/settings/FUNCTIONAL.md>)
 - [docs/05-pages/trends/FUNCTIONAL.md](<05-pages/trends/FUNCTIONAL.md>)
+- [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<ACCEPTANCE_SCENARIOS.md>)
 <!-- GENERATED: BACKLINKS END -->
