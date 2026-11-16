@@ -246,10 +246,12 @@ The approved mockup establishes the intended **structure**, not permission to ch
 ## Used by
 
 - [docs/00-workflow/OWNERSHIP_MAP.md](<../../00-workflow/OWNERSHIP_MAP.md>)
+- [docs/02-product/BUDGET_PERIODS.md](<../../02-product/BUDGET_PERIODS.md>)
 - [docs/04-components/features/TRANSACTION_SEARCH.md](<../../04-components/features/TRANSACTION_SEARCH.md>)
 - [docs/05-pages/breakdown/DESIGN_INTENT.md](<DESIGN_INTENT.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<../home/FUNCTIONAL.md>)
 - [docs/05-pages/trends/FUNCTIONAL.md](<../trends/FUNCTIONAL.md>)
+- [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<../../06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 - [docs/ACCEPTANCE_SCENARIOS.md](<../../ACCEPTANCE_SCENARIOS.md>)
 - [docs/PRODUCT_SPEC.md](<../../PRODUCT_SPEC.md>)
 - [docs/UX_SPEC.md](<../../UX_SPEC.md>)
