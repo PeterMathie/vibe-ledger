@@ -336,4 +336,5 @@ When existing design specifications contradict this philosophy, the relevant con
 - [docs/05-pages/breakdown/DESIGN_INTENT.md](<../05-pages/breakdown/DESIGN_INTENT.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<../05-pages/breakdown/FUNCTIONAL.md>)
 - [docs/05-pages/home/FUNCTIONAL.md](<../05-pages/home/FUNCTIONAL.md>)
+- [docs/05-pages/trends/FUNCTIONAL.md](<../05-pages/trends/FUNCTIONAL.md>)
 <!-- GENERATED: BACKLINKS END -->
