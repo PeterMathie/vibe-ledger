@@ -1,6 +1,8 @@
 # Monzo Integration
 
-Verified against Monzo's public documentation on 24 September 2026.
+Initially verified against Monzo's public documentation on 24 September 2026; Developer API transaction/OAuth constraints rechecked November 2026.
+
+**V1 implementation choice:** No hosted Vibe Ledger backend. [Startup](05-pages/startup/FUNCTIONAL.md) owns the first-connect, local biometric unlock, on-launch sync and offline flows; [Local Data Architecture](06-engineering/LOCAL_DATA_ARCHITECTURE.md) owns the read-only source adapter, local encrypted persistence, per-account history coverage, and query path. The options below are historical technical trade-offs; **Option A is the intended V1 path**, subject to proving native OAuth feasibility. No mobile binary may conceal a `client_secret` by assumption.
 
 Primary reference:
 - https://docs.monzo.com/
