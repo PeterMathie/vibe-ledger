@@ -163,4 +163,6 @@ Therefore:
 - [AGENTS.md](<../AGENTS.md>)
 - [README.md](<../README.md>)
 - [docs/05-pages/breakdown/FUNCTIONAL.md](<05-pages/breakdown/FUNCTIONAL.md>)
+- [docs/05-pages/startup/FUNCTIONAL.md](<05-pages/startup/FUNCTIONAL.md>)
+- [docs/06-engineering/LOCAL_DATA_ARCHITECTURE.md](<06-engineering/LOCAL_DATA_ARCHITECTURE.md>)
 <!-- GENERATED: BACKLINKS END -->
