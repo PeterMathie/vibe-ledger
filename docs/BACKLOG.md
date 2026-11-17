@@ -1,5 +1,7 @@
 # Build Backlog
 
+**Legacy backlog / V1 scope correction:** Transaction Details is **read-only** in V1. BL-006 (manual per-transaction reclassification), BL-007 (user-facing merchant-rule editing), BL-008 (split editing) and BL-021 (transaction editor) are **not V1 UI requirements**. Category-level mapping remains available in Settings. Subscriptions (Epic G) are deferred to V2. Active page specs take priority over legacy navigation and requirements below.
+
 Ticket IDs are stable references for implementation agents.
 
 ## Epic A — Domain and persistence
@@ -154,8 +156,8 @@ Support navigation payloads:
 - merchant;
 - subscription.
 
-### BL-021 — Transaction editor
-Category/type/scope/split/rule controls.
+### BL-021 — Transaction editor (V2 / deferred)
+No editing UI in V1. Transaction Details is read-only per [Breakdown Functional Specification](05-pages/breakdown/FUNCTIONAL.md).
 
 ### BL-022 — Structured filters
 UI filters for period, category, super-category, merchant, amount, event type and subscription status.
