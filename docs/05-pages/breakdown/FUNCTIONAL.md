@@ -154,19 +154,18 @@ The Transactions view lists individual matching bank records, normally newest fi
 - Searchable **excluded** events and unclassified records remain inspectable through the all-transactions route rather than disappearing.
 - The transaction list is not incorrectly expected to sum to the displayed category progress if it also includes income, withdrawals, transfers or excluded events.
 
-### BRKD-009 — Transaction detail and correction
+### BRKD-009 — Read-only transaction details
 
-Selecting an individual transaction opens a focused detail view or sheet.
+Selecting an individual transaction opens a **read-only** detail view or sheet. V1 does not offer per-transaction editing, reclassification, split editing, rule creation or note editing from this view.
 
 **Acceptance criteria**
 
-- Show date/time, amount, merchant/description, and selected classification/category/scope.
+- Show date/time, amount, merchant/description, and the effective event type, category and inclusion status when known.
 - Show additional available Monzo metadata only where reliable, relevant and privacy-appropriate; do not fabricate location or merchant detail absent from the API.
-- User can correct the **app-owned** event type, category, included/excluded flag, split portions and notes when supported by the financial model.
-- User can optionally create a matching classification rule and undo a correction.
-- The original imported bank record remains intact; app-owned metadata/classification may change independently.
-- Updated classifications propagate to category rows, bars, transactions and dependent Home/Trends summaries.
-- If a split spans categories or super-categories, its constituent portions must be traceable without duplicating the underlying bank payment.
+- No Edit, Save, reclassification, split controls, rule-creation actions or editable fields appear in Transaction Details.
+- Opening, dismissing or inspecting details never changes raw or app-owned transaction data.
+- Categories can be regrouped into Living/Fun/Saving using [Settings → Categories](../settings/FUNCTIONAL.md); this is a category-level mapping operation, **not** editing an individual transaction in Breakdown.
+- When a transaction already has multiple classified portions, details may show them for inspection without providing an edit affordance.
 
 ## 6. Search entry and result integration
 
@@ -238,7 +237,7 @@ See [Money Model](../../MONEY_MODEL.md), [Monzo Integration](../../MONZO_INTEGRA
 - The [Money Model](../../MONEY_MODEL.md) and [Data Model](../../DATA_MODEL.md) currently define calendar months; the custom payday-period model is unresolved and **not defined here**.
 - A financial-component contract must address negative net category amounts, currency, rounding, partial rows, extreme overflow and Savings withdrawals consistently.
 - The exact data contract for opening Breakdown from Home/Trends/Subscriptions needs cross-page acceptance tests.
-- The detailed transaction editor, accessibility treatments and extra metadata fields need component and Monzo-adapter validation, not invented UI content.
+- Read-only transaction detail presentation, accessibility treatments and extra metadata fields need component and Monzo-adapter validation, not invented UI content.
 
 The approved mockup establishes the intended **structure**, not permission to change financial invariants or skip unresolved edge cases.
 
