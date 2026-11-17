@@ -99,7 +99,7 @@ At individual-category depth, the supporting panel shows actual matching transac
 - Transaction rows show recognisable transaction identity, date and amount, with type-aware meaning for saving activity and offsets.
 - The row set follows the active category, date-range, day selection and budget-inclusion semantics.
 - Read-only inspection in Trends does not itself edit, reclassify, delete or rewrite records.
-- Transaction management and detailed editing are owned by [Breakdown](../breakdown/FUNCTIONAL.md); a future context-preserving handoff MAY be added without redesigning the chart/panel hierarchy.
+- Transaction details in [Breakdown](../breakdown/FUNCTIONAL.md) are **read-only in V1**; a future context-preserving inspection handoff MAY be added without redesigning the chart/panel hierarchy.
 - Extremely large transaction lists are internally scrollable or virtualised within the bounded panel.
 
 ### TRND-007 — Date presets on the page
